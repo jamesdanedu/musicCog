@@ -1,0 +1,108 @@
+{
+  "name": "music-cognition-testing-platform",
+  "version": "1.0.0",
+  "description": "Scientific platform for testing concentration and reaction times under different musical conditions",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build": "electron-builder",
+    "build-win": "electron-builder --win",
+    "build-mac": "electron-builder --mac",
+    "build-linux": "electron-builder --linux",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder --publish=never",
+    "test": "jest",
+    "calibrate": "node scripts/calibrate-system.js"
+  },
+  "keywords": [
+    "electron",
+    "music",
+    "cognition",
+    "psychology",
+    "research",
+    "reaction-time",
+    "attention",
+    "concentration"
+  ],
+  "author": "Music Cognition Research Team",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "electron": "^27.0.0",
+    "electron-builder": "^24.0.0",
+    "jest": "^29.0.0"
+  },
+  "dependencies": {
+    "csv-writer": "^1.6.0",
+    "serialport": "^12.0.0",
+    "web-audio-api": "^0.2.2",
+    "tone": "^14.7.77",
+    "chart.js": "^4.4.0",
+    "date-fns": "^2.30.0",
+    "uuid": "^9.0.1",
+    "lodash": "^4.17.21"
+  },
+  "build": {
+    "appId": "com.research.musiccognition.platform",
+    "productName": "Music Cognition Testing Platform",
+    "directories": {
+      "output": "dist",
+      "resources": "assets"
+    },
+    "files": [
+      "**/*",
+      "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
+      "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}",
+      "!**/node_modules/*.d.ts",
+      "!**/node_modules/.bin",
+      "!**/*.{iml,o,hprof,orig,pyc,pyo,rbc,swp,csproj,sln,xproj}",
+      "!.editorconfig",
+      "!**/._*",
+      "!**/{.DS_Store,.git,.hg,.svn,CVS,RCS,SCCS,.gitignore,.gitattributes}",
+      "!**/{__pycache__,thumbs.db,.flowconfig,.idea,.vs,.nyc_output}",
+      "!**/{appveyor.yml,.travis.yml,circle.yml}",
+      "!**/{npm-debug.log,yarn.lock,.yarn-integrity,.yarn-metadata.json}"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.ico"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.icns"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  }
+}

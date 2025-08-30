@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Music Cognition Testing Platform</title>
+    <link rel="stylesheet" href="styles/main.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Status Bar -->
+        <div class="status-bar">
+            <div class="status-item" id="sessionStatus">No Active Session</div>
+            <div class="status-item" id="microbitStatus">Microbit: Disconnected</div>
+            <div class="status-item" id="audioStatus">Audio: Not Ready</div>
+            <div class="status-item" id="clockDisplay"></div>
+        </div>
+
+        <!-- Welcome Screen -->
+        <div id="welcomeScreen" class="screen">
+            <div class="welcome-content">
+                <h1>🎵 Music Cognition Testing Platform</h1>
+                <p class="subtitle">Scientific platform for testing concentration and reaction times under different musical conditions</p>
+                
+                <div class="welcome-actions">
+                    <button class="btn-primary" id="newSessionBtn">
+                        <i class="icon">📝</i>
+                        New Session
+                    </button>
+                    <button class="btn-secondary" id="loadSessionBtn">
+                        <i class="icon">📂</i>
+                        Load Session
+                    </button>
+                    <button class="btn-secondary" id="calibrateBtn">
+                        <i class="icon">⚙️</i>
+                        System Calibration
+                    </button>
+                </div>
+
+                <div class="system-status">
+                    <h3>System Status</h3>
+                    <div class="status-grid">
+                        <div class="status-card" id="hardwareStatus">
+                            <div class="status-icon">🎮</div>
+                            <div class="status-text">
+                                <h4>Hardware</h4>
+                                <span>Checking...</span>
+                            </div>
+                        </div>
+                        <div class="status-card" id="audioSystemStatus">
+                            <div class="status-icon">🔊</div>
+                            <div class="status-text">
+                                <h4>Audio System</h4>
+                                <span>Checking...</span>
+                            </div>
+                        </div>
+                        <div class="status-card" id="dataSystemStatus">
+                            <div class="status-icon">💾</div>
+                            <div class="status-text">
+                                <h4>Data System</h4>
+                                <span>Ready</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Participant Information Screen -->
+        <div id="participantScreen" class="screen hidden">
+            <div class="form-container">
+                <h2>Participant Information</h2>
+                <form id="participantForm" class="participant-form">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="participantId">Participant ID *</label>
+                            <input type="text" id="participantId" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="age">Age</label>
+                            <input type="number" id="age" min="1" max="120">
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="gender">Gender</label>
+                            <select id="gender">
+                                <option value="">Select...</option>
+                                <option value="male">Male</option>
+                                <option value="female">Female</option>
+                                <option value="non-binary">Non-binary</option>
+                                <option value="prefer-not-to-say">Prefer not to say</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="handedness">Handedness</label>
+                            <select id="handedness">
+                                <option value="">Select...</option>
+                                <option value="right">Right</option>
+                                <option value="left">Left</option>
+                                <option value="ambidextrous">Ambidextrous</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="musicalTraining">Musical Training (years)</label>
+                        <input type="number" id="musicalTraining" min="0" max="50" value="0">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="hearingImpairment">Hearing Impairment</label>
+                        <div class="checkbox-group">
+                            <label><input type="radio" name="hearing" value="none"> None</label>
+                            <label><input type="radio" name="hearing" value="mild"> Mild</label>
+                            <label><input type="radio" name="hearing" value="moderate"> Moderate</label>
+                            <label><input type="radio" name="hearing" value="severe"> Severe</label>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="medications">Current Medications</label>
+                        <textarea id="medications" placeholder="List any medications that might affect attention or reaction time..."></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="caffeineIntake">Caffeine Intake Today</label>
+                        <select id="caffeineIntake">
+                            <option value="none">None</option>
+                            <option value="low">Low (1 cup coffee/tea)</option>
+                            <option value="moderate">Moderate (2-3 cups)</option>
+                            <option value="high">High (4+ cups)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="sleepHours">Hours of Sleep Last Night</label>
+                        <input type="number" id="sleepHours" min="0" max="24" step="0.5">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="notes">Additional Notes</label>
+                        <textarea id="notes" placeholder="Any additional information..."></textarea>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="button" class="btn-secondary" id="cancelParticipantBtn">Cancel</button>
+                        <button type="submit" class="btn-primary">Continue to Tests</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Test Selection Screen -->
+        <div id="testSelectionScreen" class="screen hidden">
+            <div class="test-selection-container">
+                <h2>Test Battery Configuration</h2>
+                
+                <div class="session-info">
+                    <div class="info-card">
+                        <h4>Current Session</h4>
+                        <p id="sessionInfo">Session information will appear here</p>
+                    </div>
+                </div>
+
+                <div class="test-battery">
+                    <h3>Available Tests</h3>
+                    <div class="test-grid">
+                        <div class="test-card" data-test="simple-reaction">
+                            <div class="test-icon">⚡</div>
+                            <h4>Simple Reaction</h4>
+                            <p>Basic reaction time measurement</p>
+                            <div class="test-config">
+                                <span class="duration">Duration: 2 min</span>
+                                <span class="buttons">Buttons: 1</span>
+                            </div>
+                        </div>
+
+                        <div class="test-card" data-test="choice-reaction">
+                            <div class="test-icon">🎯</div>
+                            <h4>Choice Reaction</h4>
+                            <p>Multi-stimulus reaction time</p>
+                            <div class="test-config">
+                                <span class="duration">Duration: 3 min</span>
+                                <span class="buttons">Buttons: 4</span>
+                            </div>
+                        </div>
+
+                        <div class="test-card" data-test="vigilance">
+                            <div class="test-icon">👁️</div>
+                            <h4>Sustained Attention</h4>
+                            <p>Vigilance and attention lapses</p>
+                            <div class="test-config">
+                                <span class="duration">Duration: 10 min</span>
+                                <span class="buttons">Buttons: 1</span>
+                            </div>
+                        </div>
+
+                        <div class="test-card" data-test="n-back">
+                            <div class="test-icon">🧠</div>
+                            <h4>Working Memory</h4>
+                            <p>N-back memory test</p>
+                            <div class="test-config">
+                                <span class="duration">Duration: 5 min</span>
+                                <span class="buttons">Buttons: 4</span>
+                            </div>
+                        </div>
+
+                        <div class="test-card" data-test="rhythm-sync">
+                            <div class="test-icon">🎵</div>
+                            <h4>Rhythm Synchronization</h4>
+                            <p>Temporal precision and beat matching</p>
+                            <div class="test-config">
+                                <span class="duration">Duration: 4 min</span>
+                                <span class="buttons">Buttons: 1</span>
+                            </div>
+                        </div>
+
+                        <div class="test-card" data-test="multi-stream">
+                            <div class="test-icon">🌊</div>
+                            <h4>Multi-Stream Attention</h4>
+                            <p>Divided attention and stream monitoring</p>
+                            <div class="test-config">
+                                <span class="duration">Duration: 6 min</span>
+                                <span class="buttons">Buttons: 4</span>
+                            </div>
+                        </div>
+
+                        <div class="test-card" data-test="stroop">
+                            <div class="test-icon">🌈</div>
+                            <h4>Stroop Interference</h4>
+                            <p>Cognitive control and interference</p>
+                            <div class="test-config">
+                                <span class="duration">Duration: 3 min</span>
+                                <span class="buttons">Buttons: 4</span>
+                            </div>
+                        </div>
+
+                        <div class="test-card" data-test="dual-task">
+                            <div class="test-icon">⚖️</div>
+                            <h4>Dual-Task Paradigm</h4>
+                            <p>Multitasking and cognitive load</p>
+                            <div class="test-config">
+                                <span class="duration">Duration: 5 min</span>
+                                <span class="buttons">Buttons: 2</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="music-conditions">
+                        <h3>Music Conditions</h3>
+                        <div class="condition-selection">
+                            <label><input type="checkbox" value="silence" checked> Silence (Baseline)</label>
+                            <label><input type="checkbox" value="classical_low"> Classical - Low Tempo</label>
+                            <label><input type="checkbox" value="classical_high"> Classical - High Tempo</label>
+                            <label><input type="checkbox" value="ambient"> Ambient</label>
+                            <label><input type="checkbox" value="electronic"> Electronic</label>
+                            <label><input type="checkbox" value="white_noise"> White Noise</label>
+                            <label><input type="checkbox" value="binaural"> Binaural Beats (40Hz)</label>
+                        </div>
+                    </div>
+
+                    <div class="battery-controls">
+                        <button class="btn-secondary" id="customBatteryBtn">Custom Selection</button>
+                        <button class="btn-primary" id="standardBatteryBtn">Run Standard Battery</button>
+                        <button class="btn-success" id="startTestingBtn">Start Testing Session</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Test Running Screen -->
+        <div id="testScreen" class="screen hidden">
+            <div class="test-header">
+                <div class="test-progress">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="testProgress"></div>
+                    </div>
+                    <div class="progress-text">
+                        <span id="currentTestName">Test Name</span>
+                        <span id="progressText">0 / 0</span>
+                    </div>
+                </div>
+                <div class="test-controls">
+                    <button class="btn-warning" id="pauseTestBtn">Pause</button>
+                    <button class="btn-danger" id="stopTestBtn">Stop</button>
+                </div>
+            </div>
+
+            <div class="test-content">
+                <div class="music-indicator" id="musicIndicator">
+                    <span class="music-icon">🎵</span>
+                    <span class="music-condition" id="currentMusicCondition">Silence</span>
+                    <div class="volume-controls">
+                        <button id="volumeDown">🔉</button>
+                        <div class="volume-slider">
+                            <input type="range" id="volumeSlider" min="0" max="100" value="50">
+                        </div>
+                        <button id="volumeUp">🔊</button>
+                    </div>
+                </div>
+
+                <div class="test-display">
+                    <canvas id="testCanvas"></canvas>
+                </div>
+
+                <div class="button-indicators">
+                    <div class="button-indicator" data-button="0">
+                        <div class="button-visual red"></div>
+                        <span>Button 1</span>
+                    </div>
+                    <div class="button-indicator" data-button="1">
+                        <div class="button-visual blue"></div>
+                        <span>Button 2</span>
+                    </div>
+                    <div class="button-indicator" data-button="2">
+                        <div class="button-visual green"></div>
+                        <span>Button 3</span>
+                    </div>
+                    <div class="button-indicator" data-button="3">
+                        <div class="button-visual yellow"></div>
+                        <span>Button 4</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="test-stats">
+                <div class="stat-item">
+                    <span class="stat-value" id="currentScore">0</span>
+                    <span class="stat-label">Score</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-value" id="reactionTime">0ms</span>
+                    <span class="stat-label">Avg RT</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-value" id="accuracy">0%</span>
+                    <span class="stat-label">Accuracy</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-value" id="timeRemaining">0:00</span>
+                    <span class="stat-label">Time Left</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Results Screen -->
+        <div id="resultsScreen" class="screen hidden">
+            <div class="results-container">
+                <h2>Session Results</h2>
+                
+                <div class="results-summary" id="resultsSummary">
+                    <!-- Results will be populated here -->
+                </div>
+
+                <div class="results-actions">
+                    <button class="btn-secondary" id="viewDetailedBtn">View Detailed Analysis</button>
+                    <button class="btn-primary" id="exportResultsBtn">Export Results</button>
+                    <button class="btn-success" id="newSessionFromResultsBtn">New Session</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Calibration Screen -->
+        <div id="calibrationScreen" class="screen hidden">
+            <div class="calibration-container">
+                <h2>System Calibration</h2>
+                
+                <div class="calibration-steps">
+                    <div class="step active" data-step="1">
+                        <h3>Step 1: Hardware Test</h3>
+                        <p>Testing button responsiveness and timing...</p>
+                        <div class="calibration-progress">
+                            <div class="progress-bar">
+                                <div class="progress-fill" id="hardwareCalibrationProgress"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="step" data-step="2">
+                        <h3>Step 2: Audio Latency</h3>
+                        <p>Measuring audio system latency...</p>
+                        <div class="calibration-progress">
+                            <div class="progress-bar">
+                                <div class="progress-fill" id="audioCalibrationProgress"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="step" data-step="3">
+                        <h3>Step 3: Baseline Reaction Time</h3>
+                        <p>Establishing participant baseline...</p>
+                        <div class="calibration-progress">
+                            <div class="progress-bar">
+                                <div class="progress-fill" id="baselineCalibrationProgress"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="calibration-controls">
+                    <button class="btn-primary" id="startCalibrationBtn">Start Calibration</button>
+                    <button class="btn-secondary" id="skipCalibrationBtn">Skip</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="loading-overlay hidden">
+        <div class="loading-content">
+            <div class="loading-spinner"></div>
+            <p id="loadingText">Loading...</p>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/core/data-logger.js"></script>
+    <script src="js/core/metrics-collector.js"></script>
+    <script src="js/core/music-analyzer.js"></script>
+    <script src="js/core/microbit-interface.js"></script>
+    
+    <script src="js/tests/simple-reaction.js"></script>
+    <script src="js/tests/choice-reaction.js"></script>
+    <script src="js/tests/vigilance.js"></script>
+    <script src="js/tests/n-back.js"></script>
+    <script src="js/tests/rhythm-sync.js"></script>
+    <script src="js/tests/multi-stream.js"></script>
+    <script src="js/tests/stroop.js"></script>
+    <script src="js/tests/dual-task.js"></script>
+    
+    <script src="js/platform.js"></script>
+    
+    <script>
+        // Initialize platform after all scripts are loaded
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('Initializing Music Cognition Testing Platform...');
+            
+            if (typeof MusicCognitionPlatform !== 'undefined') {
+                window.platform = new MusicCognitionPlatform();
+                console.log('Platform initialized successfully');
+            } else {
+                console.error('MusicCognitionPlatform class not found!');
+            }
+        });
+    </script>
+</body>
+</html>

@@ -3,58 +3,493 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Music Cognition Testing Platform</title>
-    <link rel="stylesheet" href="styles/main.css">
+    <title>Music & Cognition Research Platform</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: #ffffff;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .screen {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 40px 20px;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        /* Header Styles */
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        h2 {
+            font-size: 1.8em;
+            margin-bottom: 20px;
+            color: #a8d8ff;
+        }
+
+        .subtitle {
+            font-size: 1.2em;
+            color: #b8d4f1;
+            margin-bottom: 30px;
+        }
+
+        /* Welcome Screen */
+        .welcome-content {
+            text-align: center;
+            max-width: 700px;
+        }
+
+        .welcome-content p {
+            font-size: 1.1em;
+            line-height: 1.6;
+            margin-bottom: 20px;
+            color: #dde8f7;
+        }
+
+        .system-check {
+            margin: 40px 0;
+            padding: 30px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+        }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .status-card {
+            background: rgba(255,255,255,0.15);
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            transition: transform 0.3s;
+        }
+
+        .status-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .status-icon {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .status-text h4 {
+            margin-bottom: 5px;
+            color: #fff;
+        }
+
+        .status-text span {
+            color: #4ade80;
+            font-weight: bold;
+        }
+
+        /* Button Styles */
+        .btn {
+            padding: 15px 40px;
+            font-size: 1.1em;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+        }
+
+        .btn-secondary {
+            background: rgba(255,255,255,0.2);
+            color: white;
+            border: 2px solid rgba(255,255,255,0.3);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255,255,255,0.3);
+        }
+
+        /* Form Styles */
+        .form-container {
+            background: rgba(255,255,255,0.1);
+            padding: 40px;
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+            max-width: 700px;
+            width: 100%;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+        }
+
+        .participant-form {
+            margin-top: 30px;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #e0e7ff;
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid rgba(255,255,255,0.2);
+            border-radius: 6px;
+            background: rgba(255,255,255,0.1);
+            color: white;
+            font-size: 1em;
+            transition: border-color 0.3s;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            background: rgba(255,255,255,0.15);
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 60px;
+        }
+
+        .form-group select option {
+            background: #2a5298;
+            color: white;
+        }
+
+        .checkbox-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 8px;
+        }
+
+        .checkbox-group-horizontal {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+            gap: 10px;
+            margin-top: 8px;
+        }
+
+        .checkbox-group-horizontal label {
+            display: flex;
+            align-items: center;
+            padding: 8px 12px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 6px;
+            transition: background 0.2s;
+            cursor: pointer;
+        }
+
+        .checkbox-group-horizontal label:hover {
+            background: rgba(255,255,255,0.1);
+        }
+
+        .checkbox-group-horizontal input[type="checkbox"] {
+            margin-right: 8px;
+            cursor: pointer;
+        }
+
+        .form-group small {
+            display: block;
+            margin-top: 5px;
+            color: #888;
+            font-size: 0.85em;
+        }
+
+        .checkbox-group label,
+        .radio-group label {
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .checkbox-group label:hover,
+        .radio-group label:hover {
+            background: rgba(255,255,255,0.1);
+        }
+
+        .checkbox-group input,
+        .radio-group input {
+            margin-right: 10px;
+            width: auto;
+        }
+
+        /* Test Selection */
+        .test-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin: 30px 0;
+            width: 100%;
+        }
+
+        .test-card {
+            background: rgba(255,255,255,0.1);
+            padding: 25px;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s;
+            border: 2px solid transparent;
+        }
+
+        .test-card:hover {
+            background: rgba(255,255,255,0.15);
+            transform: translateY(-5px);
+        }
+
+        .test-card.selected {
+            border-color: #4ade80;
+            background: rgba(74, 222, 128, 0.2);
+        }
+
+        .test-card h3 {
+            margin-bottom: 10px;
+            color: #a8d8ff;
+        }
+
+        .test-card p {
+            font-size: 0.9em;
+            color: #dde8f7;
+            line-height: 1.4;
+        }
+
+        /* Canvas Styles */
+        #testCanvas {
+            border: 3px solid rgba(255,255,255,0.3);
+            border-radius: 10px;
+            background: #0f1419;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            cursor: crosshair;
+        }
+
+        /* Results Display */
+        .results-container {
+            background: rgba(255,255,255,0.1);
+            padding: 40px;
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+            max-width: 900px;
+            width: 100%;
+        }
+
+        .metric-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 30px 0;
+        }
+
+        .metric-card {
+            background: rgba(255,255,255,0.15);
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .metric-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #4ade80;
+            margin: 10px 0;
+        }
+
+        .metric-label {
+            color: #b8d4f1;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* Progress Bar */
+        .progress-container {
+            width: 100%;
+            max-width: 600px;
+            margin: 20px 0;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 30px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 15px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+
+        /* Info Display */
+        .info-box {
+            background: rgba(255,255,255,0.1);
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            border-left: 4px solid #667eea;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 15px;
+            margin-top: 30px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        /* Animations */
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .fade-in {
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 2em;
+            }
+
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+
+            .test-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .form-container,
+            .results-container {
+                padding: 25px;
+            }
+
+            .checkbox-group-horizontal {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
+        /* Loading Spinner */
+        .loading {
+            display: inline-block;
+            width: 50px;
+            height: 50px;
+            border: 5px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: #667eea;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
 </head>
 <body>
-    <div class="container">
-        <!-- Status Bar -->
-        <div class="status-bar">
-            <div class="status-item" id="sessionStatus">No Active Session</div>
-            <div class="status-item" id="microbitStatus">Microbit: Disconnected</div>
-            <div class="status-item" id="audioStatus">Audio: Not Ready</div>
-            <div class="status-item" id="clockDisplay"></div>
-        </div>
-
-        <!-- Welcome Screen -->
-        <div id="welcomeScreen" class="screen">
+    <!-- Welcome Screen -->
+    <div id="welcomeScreen" class="screen">
+        <div class="container">
+            <header>
+                <h1>🎵 Music & Cognition Research Platform</h1>
+                <p class="subtitle">Investigating the Effects of Music on Cognitive Performance</p>
+            </header>
+            
             <div class="welcome-content">
-                <h1>🎵 Music Cognition Testing Platform</h1>
-                <p class="subtitle">Scientific platform for testing concentration and reaction times under different musical conditions</p>
+                <p>Welcome to our research study examining how different types of music affect cognitive performance and reaction time.</p>
                 
-                <div class="welcome-actions">
-                    <button class="btn-primary" id="newSessionBtn">
-                        <i class="icon">📝</i>
-                        New Session
-                    </button>
-                    <button class="btn-secondary" id="loadSessionBtn">
-                        <i class="icon">📂</i>
-                        Load Session
-                    </button>
-                    <button class="btn-secondary" id="calibrateBtn">
-                        <i class="icon">⚙️</i>
-                        System Calibration
-                    </button>
-                </div>
-
-                <div class="system-status">
-                    <h3>System Status</h3>
+                <div class="system-check">
+                    <h3>System Status Check</h3>
                     <div class="status-grid">
-                        <div class="status-card" id="hardwareStatus">
-                            <div class="status-icon">🎮</div>
-                            <div class="status-text">
-                                <h4>Hardware</h4>
-                                <span>Checking...</span>
-                            </div>
-                        </div>
-                        <div class="status-card" id="audioSystemStatus">
-                            <div class="status-icon">🔊</div>
+                        <div class="status-card">
+                            <div class="status-icon">🎧</div>
                             <div class="status-text">
                                 <h4>Audio System</h4>
+                                <span>Ready</span>
+                            </div>
+                        </div>
+                        <div class="status-card">
+                            <div class="status-icon">⚡</div>
+                            <div class="status-text">
+                                <h4>Response System</h4>
                                 <span>Checking...</span>
                             </div>
                         </div>
-                        <div class="status-card" id="dataSystemStatus">
+                        <div class="status-card">
                             <div class="status-icon">💾</div>
                             <div class="status-text">
                                 <h4>Data System</h4>
@@ -63,386 +498,550 @@
                         </div>
                     </div>
                 </div>
+
+                <div class="info-box">
+                    <p><strong>Study Duration:</strong> Approximately 15-20 minutes</p>
+                    <p><strong>Requirements:</strong> Headphones and a quiet environment recommended</p>
+                </div>
+
+                <button class="btn btn-primary" onclick="app.showScreen('participantScreen')">
+                    Begin Study
+                </button>
             </div>
         </div>
+    </div>
 
-        <!-- Participant Information Screen -->
-        <div id="participantScreen" class="screen hidden">
-            <div class="form-container">
-                <h2>Participant Information</h2>
-                <form id="participantForm" class="participant-form">
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="participantId">Participant ID *</label>
-                            <input type="text" id="participantId" required>
-                        </div>
-                        <div class="form-group">
-                            <label for="age">Age</label>
-                            <input type="number" id="age" min="1" max="120">
-                        </div>
-                    </div>
-                    
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="gender">Gender</label>
-                            <select id="gender">
-                                <option value="">Select...</option>
-                                <option value="male">Male</option>
-                                <option value="female">Female</option>
-                                <option value="non-binary">Non-binary</option>
-                                <option value="prefer-not-to-say">Prefer not to say</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label for="handedness">Handedness</label>
-                            <select id="handedness">
-                                <option value="">Select...</option>
-                                <option value="right">Right</option>
-                                <option value="left">Left</option>
-                                <option value="ambidextrous">Ambidextrous</option>
-                            </select>
-                        </div>
-                    </div>
-
+    <!-- Participant Information Screen -->
+    <div id="participantScreen" class="screen hidden">
+        <div class="form-container">
+            <h2>Participant Information</h2>
+            <p style="margin-bottom: 20px; color: #dde8f7;">Please complete all required fields marked with *</p>
+            
+            <form id="participantForm" class="participant-form" onsubmit="app.handleParticipantSubmit(event); return false;">
+                <div class="form-row">
                     <div class="form-group">
-                        <label for="musicalTraining">Musical Training (years)</label>
-                        <input type="number" id="musicalTraining" min="0" max="50" value="0">
+                        <label for="participantId">Participant ID *</label>
+                        <input type="text" id="participantId" required placeholder="e.g., P001">
                     </div>
-
                     <div class="form-group">
-                        <label for="hearingImpairment">Hearing Impairment</label>
-                        <div class="checkbox-group">
-                            <label><input type="radio" name="hearing" value="none"> None</label>
-                            <label><input type="radio" name="hearing" value="mild"> Mild</label>
-                            <label><input type="radio" name="hearing" value="moderate"> Moderate</label>
-                            <label><input type="radio" name="hearing" value="severe"> Severe</label>
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="medications">Current Medications</label>
-                        <textarea id="medications" placeholder="List any medications that might affect attention or reaction time..."></textarea>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="caffeineIntake">Caffeine Intake Today</label>
-                        <select id="caffeineIntake">
-                            <option value="none">None</option>
-                            <option value="low">Low (1 cup coffee/tea)</option>
-                            <option value="moderate">Moderate (2-3 cups)</option>
-                            <option value="high">High (4+ cups)</option>
+                        <label for="ageCategory">Age Category *</label>
+                        <select id="ageCategory" required>
+                            <option value="">Select...</option>
+                            <option value="10-20">10-20</option>
+                            <option value="20-30">20-30</option>
+                            <option value="30-40">30-40</option>
+                            <option value="40-50">40-50</option>
+                            <option value="50+">50+</option>
                         </select>
                     </div>
-
+                </div>
+                
+                <div class="form-row">
                     <div class="form-group">
-                        <label for="sleepHours">Hours of Sleep Last Night</label>
-                        <input type="number" id="sleepHours" min="0" max="24" step="0.5">
+                        <label for="gender">Gender</label>
+                        <select id="gender">
+                            <option value="">Select...</option>
+                            <option value="male">Male</option>
+                            <option value="female">Female</option>
+                            <option value="non-binary">Non-binary</option>
+                            <option value="prefer-not-to-say">Prefer not to say</option>
+                        </select>
                     </div>
-
                     <div class="form-group">
-                        <label for="notes">Additional Notes</label>
-                        <textarea id="notes" placeholder="Any additional information..."></textarea>
+                        <label for="dominantHand">Dominant Hand *</label>
+                        <select id="dominantHand" required>
+                            <option value="">Select...</option>
+                            <option value="right">Right</option>
+                            <option value="left">Left</option>
+                        </select>
                     </div>
+                </div>
 
-                    <div class="form-actions">
-                        <button type="button" class="btn-secondary" id="cancelParticipantBtn">Cancel</button>
-                        <button type="submit" class="btn-primary">Continue to Tests</button>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="musicalTraining">Musical Training (years) *</label>
+                        <input type="number" id="musicalTraining" min="0" max="50" value="0" required>
+                        <small>Enter 0 if no formal training</small>
                     </div>
-                </form>
-            </div>
+                    <div class="form-group">
+                        <label for="hearingImpairment">Hearing Impairment *</label>
+                        <select id="hearingImpairment" required>
+                            <option value="">Select...</option>
+                            <option value="none">None</option>
+                            <option value="mild">Mild</option>
+                            <option value="moderate">Moderate</option>
+                            <option value="severe">Severe</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="medications">Current Medications</label>
+                    <textarea id="medications" rows="2" placeholder="List any medications, or write 'None' if not applicable..."></textarea>
+                    <small>Include medications that might affect attention, reaction time, or mood</small>
+                </div>
+
+                <div class="form-group">
+                    <label>Music Preferences (select all that apply)</label>
+                    <div class="checkbox-group-horizontal">
+                        <label><input type="checkbox" name="musicPref" value="pop"> Pop</label>
+                        <label><input type="checkbox" name="musicPref" value="sad"> Sad</label>
+                        <label><input type="checkbox" name="musicPref" value="rock"> Rock</label>
+                        <label><input type="checkbox" name="musicPref" value="rap"> Rap</label>
+                        <label><input type="checkbox" name="musicPref" value="heavy-metal"> Heavy Metal</label>
+                        <label><input type="checkbox" name="musicPref" value="classical"> Classical</label>
+                        <label><input type="checkbox" name="musicPref" value="other"> Other</label>
+                        <label><input type="checkbox" name="musicPref" value="none"> None</label>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="otherGenre">If "Other", please specify:</label>
+                    <input type="text" id="otherGenre" placeholder="e.g., Jazz, Country, Electronic...">
+                </div>
+
+                <div class="form-group">
+                    <label for="caffeineIntake">Caffeine Intake Today</label>
+                    <select id="caffeineIntake">
+                        <option value="none">None</option>
+                        <option value="low">Low (1 cup coffee/tea)</option>
+                        <option value="moderate">Moderate (2-3 cups)</option>
+                        <option value="high">High (4+ cups)</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="sleepHours">Hours of Sleep Last Night</label>
+                    <input type="number" id="sleepHours" min="0" max="24" step="0.5" placeholder="e.g., 7.5">
+                </div>
+
+                <div class="form-group">
+                    <label for="notes">Additional Notes</label>
+                    <textarea id="notes" placeholder="Any additional information..."></textarea>
+                </div>
+
+                <div class="button-group">
+                    <button type="button" class="btn btn-secondary" onclick="app.showScreen('welcomeScreen')">
+                        Back
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                        Continue to Test Selection
+                    </button>
+                </div>
+            </form>
         </div>
+    </div>
 
-        <!-- Test Selection Screen -->
-        <div id="testSelectionScreen" class="screen hidden">
-            <div class="test-selection-container">
-                <h2>Test Battery Configuration</h2>
-                
-                <div class="session-info">
-                    <div class="info-card">
-                        <h4>Current Session</h4>
-                        <p id="sessionInfo">Session information will appear here</p>
-                    </div>
+    <!-- Test Selection Screen -->
+    <div id="testSelectionScreen" class="screen hidden">
+        <div class="container" style="max-width: 1000px;">
+            <h2>Select Cognitive Tests</h2>
+            <p style="text-align: center; margin-bottom: 30px; color: #dde8f7;">
+                Choose which tests to include in this session
+            </p>
+
+            <div id="sessionInfo" class="info-box"></div>
+
+            <div class="test-grid">
+                <div class="test-card" onclick="app.toggleTest(this)" data-test="simple-reaction">
+                    <h3>⚡ Simple Reaction Time</h3>
+                    <p>Measure basic response speed to visual stimuli</p>
+                    <p><small>Duration: 2 minutes</small></p>
                 </div>
 
-                <div class="test-battery">
-                    <h3>Available Tests</h3>
-                    <div class="test-grid">
-                        <div class="test-card" data-test="simple-reaction">
-                            <div class="test-icon">⚡</div>
-                            <h4>Simple Reaction</h4>
-                            <p>Basic reaction time measurement</p>
-                            <div class="test-config">
-                                <span class="duration">Duration: 2 min</span>
-                                <span class="buttons">Buttons: 1</span>
-                            </div>
-                        </div>
-
-                        <div class="test-card" data-test="choice-reaction">
-                            <div class="test-icon">🎯</div>
-                            <h4>Choice Reaction</h4>
-                            <p>Multi-stimulus reaction time</p>
-                            <div class="test-config">
-                                <span class="duration">Duration: 3 min</span>
-                                <span class="buttons">Buttons: 4</span>
-                            </div>
-                        </div>
-
-                        <div class="test-card" data-test="vigilance">
-                            <div class="test-icon">👁️</div>
-                            <h4>Sustained Attention</h4>
-                            <p>Vigilance and attention lapses</p>
-                            <div class="test-config">
-                                <span class="duration">Duration: 10 min</span>
-                                <span class="buttons">Buttons: 1</span>
-                            </div>
-                        </div>
-
-                        <div class="test-card" data-test="n-back">
-                            <div class="test-icon">🧠</div>
-                            <h4>Working Memory</h4>
-                            <p>N-back memory test</p>
-                            <div class="test-config">
-                                <span class="duration">Duration: 5 min</span>
-                                <span class="buttons">Buttons: 4</span>
-                            </div>
-                        </div>
-
-                        <div class="test-card" data-test="rhythm-sync">
-                            <div class="test-icon">🎵</div>
-                            <h4>Rhythm Synchronization</h4>
-                            <p>Temporal precision and beat matching</p>
-                            <div class="test-config">
-                                <span class="duration">Duration: 4 min</span>
-                                <span class="buttons">Buttons: 1</span>
-                            </div>
-                        </div>
-
-                        <div class="test-card" data-test="multi-stream">
-                            <div class="test-icon">🌊</div>
-                            <h4>Multi-Stream Attention</h4>
-                            <p>Divided attention and stream monitoring</p>
-                            <div class="test-config">
-                                <span class="duration">Duration: 6 min</span>
-                                <span class="buttons">Buttons: 4</span>
-                            </div>
-                        </div>
-
-                        <div class="test-card" data-test="stroop">
-                            <div class="test-icon">🌈</div>
-                            <h4>Stroop Interference</h4>
-                            <p>Cognitive control and interference</p>
-                            <div class="test-config">
-                                <span class="duration">Duration: 3 min</span>
-                                <span class="buttons">Buttons: 4</span>
-                            </div>
-                        </div>
-
-                        <div class="test-card" data-test="dual-task">
-                            <div class="test-icon">⚖️</div>
-                            <h4>Dual-Task Paradigm</h4>
-                            <p>Multitasking and cognitive load</p>
-                            <div class="test-config">
-                                <span class="duration">Duration: 5 min</span>
-                                <span class="buttons">Buttons: 2</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="music-conditions">
-                        <h3>Music Conditions</h3>
-                        <div class="condition-selection">
-                            <label><input type="checkbox" value="silence" checked> Silence (Baseline)</label>
-                            <label><input type="checkbox" value="classical_low"> Classical - Low Tempo</label>
-                            <label><input type="checkbox" value="classical_high"> Classical - High Tempo</label>
-                            <label><input type="checkbox" value="ambient"> Ambient</label>
-                            <label><input type="checkbox" value="electronic"> Electronic</label>
-                            <label><input type="checkbox" value="white_noise"> White Noise</label>
-                            <label><input type="checkbox" value="binaural"> Binaural Beats (40Hz)</label>
-                        </div>
-                    </div>
-
-                    <div class="battery-controls">
-                        <button class="btn-secondary" id="customBatteryBtn">Custom Selection</button>
-                        <button class="btn-primary" id="standardBatteryBtn">Run Standard Battery</button>
-                        <button class="btn-success" id="startTestingBtn">Start Testing Session</button>
-                    </div>
+                <div class="test-card" onclick="app.toggleTest(this)" data-test="choice-reaction">
+                    <h3>🎯 Choice Reaction Time</h3>
+                    <p>Respond to different colored targets with different buttons</p>
+                    <p><small>Duration: 3 minutes</small></p>
                 </div>
-            </div>
-        </div>
 
-        <!-- Test Running Screen -->
-        <div id="testScreen" class="screen hidden">
-            <div class="test-header">
-                <div class="test-progress">
-                    <div class="progress-bar">
-                        <div class="progress-fill" id="testProgress"></div>
-                    </div>
-                    <div class="progress-text">
-                        <span id="currentTestName">Test Name</span>
-                        <span id="progressText">0 / 0</span>
-                    </div>
+                <div class="test-card" onclick="app.toggleTest(this)" data-test="go-nogo">
+                    <h3>🚦 Go/No-Go Task</h3>
+                    <p>Test response inhibition and attention control</p>
+                    <p><small>Duration: 3 minutes</small></p>
                 </div>
-                <div class="test-controls">
-                    <button class="btn-warning" id="pauseTestBtn">Pause</button>
-                    <button class="btn-danger" id="stopTestBtn">Stop</button>
+
+                <div class="test-card" onclick="app.toggleTest(this)" data-test="stroop">
+                    <h3>🌈 Stroop Test</h3>
+                    <p>Measure selective attention and cognitive flexibility</p>
+                    <p><small>Duration: 2 minutes</small></p>
+                </div>
+
+                <div class="test-card" onclick="app.toggleTest(this)" data-test="digit-span">
+                    <h3>🔢 Digit Span</h3>
+                    <p>Assess working memory capacity</p>
+                    <p><small>Duration: 4 minutes</small></p>
+                </div>
+
+                <div class="test-card" onclick="app.toggleTest(this)" data-test="n-back">
+                    <h3>🧠 N-Back Task</h3>
+                    <p>Challenge working memory with continuous updating</p>
+                    <p><small>Duration: 5 minutes</small></p>
                 </div>
             </div>
 
-            <div class="test-content">
-                <div class="music-indicator" id="musicIndicator">
-                    <span class="music-icon">🎵</span>
-                    <span class="music-condition" id="currentMusicCondition">Silence</span>
-                    <div class="volume-controls">
-                        <button id="volumeDown">🔉</button>
-                        <div class="volume-slider">
-                            <input type="range" id="volumeSlider" min="0" max="100" value="50">
-                        </div>
-                        <button id="volumeUp">🔊</button>
-                    </div>
-                </div>
+            <div style="text-align: center; margin: 30px 0;">
+                <button class="btn btn-secondary" onclick="app.selectStandardBattery()">
+                    Select Standard Battery
+                </button>
+            </div>
 
-                <div class="test-display">
-                    <canvas id="testCanvas"></canvas>
-                </div>
-
-                <div class="button-indicators">
-                    <div class="button-indicator" data-button="0">
-                        <div class="button-visual red"></div>
-                        <span>Button 1</span>
-                    </div>
-                    <div class="button-indicator" data-button="1">
-                        <div class="button-visual blue"></div>
-                        <span>Button 2</span>
-                    </div>
-                    <div class="button-indicator" data-button="2">
-                        <div class="button-visual green"></div>
-                        <span>Button 3</span>
-                    </div>
-                    <div class="button-indicator" data-button="3">
-                        <div class="button-visual yellow"></div>
-                        <span>Button 4</span>
-                    </div>
+            <div class="info-box">
+                <h3 style="margin-bottom: 15px;">Music Conditions</h3>
+                <div class="checkbox-group">
+                    <label><input type="checkbox" value="silence" checked> Silence (Control)</label>
+                    <label><input type="checkbox" value="classical"> Classical Music (Low Tempo)</label>
+                    <label><input type="checkbox" value="ambient"> Ambient/Electronic</label>
+                    <label><input type="checkbox" value="pop"> Pop Music</label>
+                    <label><input type="checkbox" value="rock"> Rock Music</label>
+                    <label><input type="checkbox" value="preferred"> Participant's Preferred Genre</label>
                 </div>
             </div>
 
-            <div class="test-stats">
-                <div class="stat-item">
-                    <span class="stat-value" id="currentScore">0</span>
-                    <span class="stat-label">Score</span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-value" id="reactionTime">0ms</span>
-                    <span class="stat-label">Avg RT</span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-value" id="accuracy">0%</span>
-                    <span class="stat-label">Accuracy</span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-value" id="timeRemaining">0:00</span>
-                    <span class="stat-label">Time Left</span>
-                </div>
-            </div>
-        </div>
-
-        <!-- Results Screen -->
-        <div id="resultsScreen" class="screen hidden">
-            <div class="results-container">
-                <h2>Session Results</h2>
-                
-                <div class="results-summary" id="resultsSummary">
-                    <!-- Results will be populated here -->
-                </div>
-
-                <div class="results-actions">
-                    <button class="btn-secondary" id="viewDetailedBtn">View Detailed Analysis</button>
-                    <button class="btn-primary" id="exportResultsBtn">Export Results</button>
-                    <button class="btn-success" id="newSessionFromResultsBtn">New Session</button>
-                </div>
-            </div>
-        </div>
-
-        <!-- Calibration Screen -->
-        <div id="calibrationScreen" class="screen hidden">
-            <div class="calibration-container">
-                <h2>System Calibration</h2>
-                
-                <div class="calibration-steps">
-                    <div class="step active" data-step="1">
-                        <h3>Step 1: Hardware Test</h3>
-                        <p>Testing button responsiveness and timing...</p>
-                        <div class="calibration-progress">
-                            <div class="progress-bar">
-                                <div class="progress-fill" id="hardwareCalibrationProgress"></div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="step" data-step="2">
-                        <h3>Step 2: Audio Latency</h3>
-                        <p>Measuring audio system latency...</p>
-                        <div class="calibration-progress">
-                            <div class="progress-bar">
-                                <div class="progress-fill" id="audioCalibrationProgress"></div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="step" data-step="3">
-                        <h3>Step 3: Baseline Reaction Time</h3>
-                        <p>Establishing participant baseline...</p>
-                        <div class="calibration-progress">
-                            <div class="progress-bar">
-                                <div class="progress-fill" id="baselineCalibrationProgress"></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="calibration-controls">
-                    <button class="btn-primary" id="startCalibrationBtn">Start Calibration</button>
-                    <button class="btn-secondary" id="skipCalibrationBtn">Skip</button>
-                </div>
+            <div class="button-group">
+                <button class="btn btn-secondary" onclick="app.showScreen('participantScreen')">
+                    Back
+                </button>
+                <button class="btn btn-primary" onclick="app.startTestBattery()">
+                    Start Testing Session
+                </button>
             </div>
         </div>
     </div>
 
-    <!-- Loading Overlay -->
-    <div id="loadingOverlay" class="loading-overlay hidden">
-        <div class="loading-content">
-            <div class="loading-spinner"></div>
-            <p id="loadingText">Loading...</p>
-        </div>
-    </div>
-
-    <!-- Scripts -->
-    <script src="js/core/data-logger.js"></script>
-    <script src="js/core/metrics-collector.js"></script>
-    <script src="js/core/music-analyzer.js"></script>
-    <script src="js/core/microbit-interface.js"></script>
-    
-    <script src="js/tests/simple-reaction.js"></script>
-    <script src="js/tests/choice-reaction.js"></script>
-    <script src="js/tests/vigilance.js"></script>
-    <script src="js/tests/n-back.js"></script>
-    <script src="js/tests/rhythm-sync.js"></script>
-    <script src="js/tests/multi-stream.js"></script>
-    <script src="js/tests/stroop.js"></script>
-    <script src="js/tests/dual-task.js"></script>
-    
-    <script src="js/platform.js"></script>
-    
-    <script>
-        // Initialize platform after all scripts are loaded
-        document.addEventListener('DOMContentLoaded', () => {
-            console.log('Initializing Music Cognition Testing Platform...');
+    <!-- Test Execution Screen -->
+    <div id="testScreen" class="screen hidden">
+        <div class="container" style="text-align: center;">
+            <h2 id="testTitle">Test in Progress</h2>
             
-            if (typeof MusicCognitionPlatform !== 'undefined') {
-                window.platform = new MusicCognitionPlatform();
-                console.log('Platform initialized successfully');
-            } else {
-                console.error('MusicCognitionPlatform class not found!');
+            <div class="progress-container">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill" style="width: 0%;">0%</div>
+                </div>
+            </div>
+
+            <div style="margin: 30px 0;">
+                <canvas id="testCanvas" width="800" height="600"></canvas>
+            </div>
+
+            <div class="info-box" id="testInstructions">
+                Test instructions will appear here
+            </div>
+
+            <div class="button-group">
+                <button class="btn btn-secondary" onclick="app.pauseTest()">
+                    Pause
+                </button>
+                <button class="btn btn-secondary" onclick="app.skipTest()">
+                    Skip Test
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Results Screen -->
+    <div id="resultsScreen" class="screen hidden">
+        <div class="results-container">
+            <h2>Session Results</h2>
+            
+            <div id="sessionSummary" class="info-box"></div>
+
+            <div class="metric-grid" id="metricsDisplay">
+                <div class="metric-card">
+                    <div class="metric-label">Avg Reaction Time</div>
+                    <div class="metric-value" id="avgRT">--</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Accuracy</div>
+                    <div class="metric-value" id="accuracy">--</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Tests Completed</div>
+                    <div class="metric-value" id="testsCompleted">--</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Total Trials</div>
+                    <div class="metric-value" id="totalTrials">--</div>
+                </div>
+            </div>
+
+            <div class="info-box">
+                <h3>Performance Summary</h3>
+                <div id="performanceSummary"></div>
+            </div>
+
+            <div class="button-group">
+                <button class="btn btn-secondary" onclick="app.exportResults()">
+                    Export Data
+                </button>
+                <button class="btn btn-primary" onclick="app.startNewSession()">
+                    Start New Session
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Main Application Object
+        const app = {
+            currentScreen: 'welcomeScreen',
+            currentSession: null,
+            selectedTests: [],
+            testResults: {},
+            canvas: null,
+            ctx: null,
+            
+            init() {
+                console.log('Initializing Music & Cognition Research Platform...');
+                this.canvas = document.getElementById('testCanvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.setupEventListeners();
+            },
+
+            setupEventListeners() {
+                // Keyboard shortcuts
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === 'Escape') {
+                        this.handleEscape();
+                    }
+                });
+            },
+
+            showScreen(screenId) {
+                document.querySelectorAll('.screen').forEach(screen => {
+                    screen.classList.add('hidden');
+                });
+                
+                const targetScreen = document.getElementById(screenId);
+                if (targetScreen) {
+                    targetScreen.classList.remove('hidden');
+                    targetScreen.classList.add('fade-in');
+                    this.currentScreen = screenId;
+                }
+            },
+
+            handleParticipantSubmit(event) {
+                event.preventDefault();
+                
+                const formData = new FormData(event.target);
+                const musicPrefs = Array.from(document.querySelectorAll('input[name="musicPref"]:checked'))
+                    .map(cb => cb.value);
+                
+                this.currentSession = {
+                    id: 'SESSION_' + Date.now(),
+                    participant: {
+                        id: formData.get('participantId'),
+                        ageCategory: formData.get('ageCategory'),
+                        gender: formData.get('gender') || 'not-specified',
+                        dominantHand: formData.get('dominantHand'),
+                        musicalTraining: parseInt(formData.get('musicalTraining')) || 0,
+                        hearingImpairment: formData.get('hearingImpairment'),
+                        medications: formData.get('medications') || 'None',
+                        musicPreferences: musicPrefs,
+                        otherGenre: formData.get('otherGenre') || '',
+                        caffeineIntake: formData.get('caffeineIntake') || 'none',
+                        sleepHours: parseFloat(formData.get('sleepHours')) || null,
+                        notes: formData.get('notes') || ''
+                    },
+                    startTime: new Date().toISOString(),
+                    tests: [],
+                    results: {}
+                };
+                
+                this.displaySessionInfo();
+                this.showScreen('testSelectionScreen');
+            },
+
+            displaySessionInfo() {
+                const info = document.getElementById('sessionInfo');
+                if (info && this.currentSession) {
+                    const p = this.currentSession.participant;
+                    info.innerHTML = `
+                        <strong>Session ID:</strong> ${this.currentSession.id}<br>
+                        <strong>Participant:</strong> ${p.id} | 
+                        <strong>Age:</strong> ${p.ageCategory} | 
+                        <strong>Hand:</strong> ${p.dominantHand} | 
+                        <strong>Musical Training:</strong> ${p.musicalTraining} years<br>
+                        <strong>Music Preferences:</strong> ${p.musicPreferences.join(', ') || 'None specified'}
+                    `;
+                }
+            },
+
+            toggleTest(card) {
+                card.classList.toggle('selected');
+            },
+
+            selectStandardBattery() {
+                document.querySelectorAll('.test-card').forEach(card => {
+                    card.classList.add('selected');
+                });
+            },
+
+            startTestBattery() {
+                const selectedCards = document.querySelectorAll('.test-card.selected');
+                this.selectedTests = Array.from(selectedCards).map(card => card.dataset.test);
+                
+                if (this.selectedTests.length === 0) {
+                    alert('Please select at least one test');
+                    return;
+                }
+                
+                alert(`Starting ${this.selectedTests.length} tests.\n\nTests: ${this.selectedTests.join(', ')}`);
+                this.runNextTest();
+            },
+
+            runNextTest() {
+                if (this.selectedTests.length > 0) {
+                    const testName = this.selectedTests.shift();
+                    this.showScreen('testScreen');
+                    this.executeTest(testName);
+                } else {
+                    this.showResults();
+                }
+            },
+
+            executeTest(testName) {
+                const testTitle = document.getElementById('testTitle');
+                const instructions = document.getElementById('testInstructions');
+                
+                testTitle.textContent = this.getTestTitle(testName);
+                instructions.innerHTML = this.getTestInstructions(testName);
+                
+                // Simulate test execution
+                let progress = 0;
+                const interval = setInterval(() => {
+                    progress += 5;
+                    document.getElementById('progressFill').style.width = progress + '%';
+                    document.getElementById('progressFill').textContent = progress + '%';
+                    
+                    if (progress >= 100) {
+                        clearInterval(interval);
+                        setTimeout(() => this.runNextTest(), 1000);
+                    }
+                }, 200);
+                
+                this.testResults[testName] = {
+                    completed: true,
+                    avgRT: Math.floor(300 + Math.random() * 200),
+                    accuracy: (85 + Math.random() * 15).toFixed(1)
+                };
+            },
+
+            getTestTitle(testName) {
+                const titles = {
+                    'simple-reaction': 'Simple Reaction Time Test',
+                    'choice-reaction': 'Choice Reaction Time Test',
+                    'go-nogo': 'Go/No-Go Task',
+                    'stroop': 'Stroop Test',
+                    'digit-span': 'Digit Span Test',
+                    'n-back': 'N-Back Task'
+                };
+                return titles[testName] || testName;
+            },
+
+            getTestInstructions(testName) {
+                const instructions = {
+                    'simple-reaction': 'Press the spacebar as quickly as possible when you see the red circle.',
+                    'choice-reaction': 'Press the key that matches the color of the target (R=Red, G=Green, B=Blue, Y=Yellow).',
+                    'go-nogo': 'Press spacebar for green circles. Do NOT press for red circles.',
+                    'stroop': 'Identify the COLOR of the word, not what the word says.',
+                    'digit-span': 'Remember the sequence of numbers and type them back in order.',
+                    'n-back': 'Press spacebar when the current stimulus matches the one from N trials ago.'
+                };
+                return instructions[testName] || 'Follow the on-screen instructions.';
+            },
+
+            showResults() {
+                this.showScreen('resultsScreen');
+                
+                // Calculate aggregate results
+                const rtValues = Object.values(this.testResults).map(r => r.avgRT);
+                const accValues = Object.values(this.testResults).map(r => parseFloat(r.accuracy));
+                
+                const avgRT = Math.floor(rtValues.reduce((a, b) => a + b, 0) / rtValues.length);
+                const avgAcc = (accValues.reduce((a, b) => a + b, 0) / accValues.length).toFixed(1);
+                
+                document.getElementById('avgRT').textContent = avgRT + ' ms';
+                document.getElementById('accuracy').textContent = avgAcc + '%';
+                document.getElementById('testsCompleted').textContent = Object.keys(this.testResults).length;
+                document.getElementById('totalTrials').textContent = Object.keys(this.testResults).length * 30;
+                
+                // Session summary
+                const summary = document.getElementById('sessionSummary');
+                summary.innerHTML = `
+                    <strong>Participant:</strong> ${this.currentSession.participant.id}<br>
+                    <strong>Session Duration:</strong> ${this.calculateDuration()}<br>
+                    <strong>Tests Completed:</strong> ${Object.keys(this.testResults).length}
+                `;
+                
+                // Performance summary
+                const perfSummary = document.getElementById('performanceSummary');
+                let perfHTML = '<ul style="list-style: none; padding: 0;">';
+                for (const [test, results] of Object.entries(this.testResults)) {
+                    perfHTML += `<li style="margin: 10px 0;">
+                        <strong>${this.getTestTitle(test)}:</strong> 
+                        RT: ${results.avgRT}ms, Accuracy: ${results.accuracy}%
+                    </li>`;
+                }
+                perfHTML += '</ul>';
+                perfSummary.innerHTML = perfHTML;
+            },
+
+            calculateDuration() {
+                const start = new Date(this.currentSession.startTime);
+                const now = new Date();
+                const diff = Math.floor((now - start) / 1000);
+                const minutes = Math.floor(diff / 60);
+                const seconds = diff % 60;
+                return `${minutes}m ${seconds}s`;
+            },
+
+            exportResults() {
+                const data = {
+                    session: this.currentSession,
+                    results: this.testResults,
+                    exportTime: new Date().toISOString()
+                };
+                
+                const jsonString = JSON.stringify(data, null, 2);
+                const blob = new Blob([jsonString], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `session_${this.currentSession.participant.id}_${Date.now()}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+            },
+
+            startNewSession() {
+                this.currentSession = null;
+                this.selectedTests = [];
+                this.testResults = {};
+                this.showScreen('welcomeScreen');
+            },
+
+            pauseTest() {
+                alert('Test paused. Click OK to continue.');
+            },
+
+            skipTest() {
+                if (confirm('Are you sure you want to skip this test?')) {
+                    this.runNextTest();
+                }
+            },
+
+            handleEscape() {
+                if (this.currentScreen === 'testScreen') {
+                    if (confirm('Exit current test?')) {
+                        this.runNextTest();
+                    }
+                }
             }
+        };
+
+        // Initialize on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            app.init();
         });
     </script>
 </body>

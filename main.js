@@ -481,10 +481,17 @@ function showAbout() {
         type: 'info',
         title: 'About Music Cognition Testing Platform',
         message: 'Music Cognition Testing Platform',
-        detail: `Version 1.0.0\n\nA scientific platform for testing concentration and reaction times under different musical conditions.\n\nDeveloped for psychological and cognitive research applications.`
+        detail: `Version 1.0.0
+
+A scientific platform for testing concentration and reaction times under different musical conditions.
+
+Research Project by:
+Corey Ashcroft, Millie Kehoe, and Harry Quinlan
+St Mary's Secondary School, Edenderry, Co. Offaly
+
+Developed for psychological and cognitive research applications.`
     });
 }
-
 // App Events
 app.whenReady().then(createWindow);
 

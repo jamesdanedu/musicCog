@@ -601,12 +601,25 @@
                 </div>
 
                 <div class="form-group">
-                    <label for="caffeineIntake">Caffeine Intake Today</label>
-                    <select id="caffeineIntake">
+                    <label for="caffeineSource">Caffeine Source Today</label>
+                    <select id="caffeineSource">
                         <option value="none">None</option>
-                        <option value="low">Low (1 cup coffee/tea)</option>
-                        <option value="moderate">Moderate (2-3 cups)</option>
-                        <option value="high">High (4+ cups)</option>
+                        <option value="coffee">Coffee</option>
+                        <option value="tea">Tea</option>
+                        <option value="energy-drink">Energy Drink (e.g., Monster, Red Bull)</option>
+                        <option value="soda">Caffeinated Soda</option>
+                        <option value="multiple">Multiple Sources</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="caffeineAmount">Approximate Caffeine Amount</label>
+                    <select id="caffeineAmount">
+                        <option value="none">None</option>
+                        <option value="low">Low (~50-100mg / 1 cup tea or small coffee)</option>
+                        <option value="moderate">Moderate (~100-200mg / 1-2 cups coffee)</option>
+                        <option value="high">High (~200-400mg / 2-4 cups coffee or 1-2 energy drinks)</option>
+                        <option value="very-high">Very High (400mg+ / multiple energy drinks)</option>
                     </select>
                 </div>
 

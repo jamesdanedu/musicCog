@@ -38,12 +38,6 @@ class MicrobitHardwareController {
 
     async initialize() {
         try {
-            // Load SerialPort modules - v12.x API
-            const { SerialPort: SP } = require('serialport');
-            SerialPort = SP;
-            const { ReadlineParser: Parser } = require('@serialport/parser-readline');
-            ReadlineParser = Parser;
-            
             console.log('🔌 Initializing Microbit hardware...');
             
             // Find and connect to all Microbits
@@ -72,8 +66,8 @@ class MicrobitHardwareController {
 
     async connectAllMicrobits() {
         // Use the static list method from SerialPort class (v12.x API)
-        const { SerialPort: SP } = require('serialport');
-        const ports = await SP.list();
+        const { SerialPort } = require('serialport');
+        const ports = await SerialPort.list();
         
         // Find all Microbit ports
         const microbitPorts = ports.filter(port => 
@@ -97,11 +91,11 @@ class MicrobitHardwareController {
 
     async connectMicrobit(portInfo, index) {
         return new Promise((resolve, reject) => {
-            // Use the imported SerialPort constructor (v12.x API)
-            const { SerialPort: SP } = require('serialport');
+            // Import SerialPort for each connection
+            const { SerialPort } = require('serialport');
             const { ReadlineParser } = require('@serialport/parser-readline');
             
-            const port = new SP({
+            const port = new SerialPort({
                 path: portInfo.path,
                 baudRate: this.baudRate,
                 autoOpen: false

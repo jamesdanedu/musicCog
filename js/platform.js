@@ -1,4 +1,4 @@
-// js/platform.js - Main Music Cognition Testing Platform Logic
+// js/platform.js - Main Music Cognition Testing Platform Logic with Microbit Integration
 
 const { ipcRenderer } = require('electron');
 
@@ -20,9 +20,11 @@ class MusicCognitionPlatform {
         this.audioBuffer = null;
         this.audioSource = null;
         
-        // Hardware interface
+        // Hardware interface - Microbit
         this.microbitInterface = null;
         this.hardwareReady = false;
+        this.microbitConnected = false;
+        this.buttonStates = [false, false, false, false]; // Green1, White, Red, Green2
         
         // Data collection
         this.dataLogger = new DataLogger();
@@ -46,6 +48,9 @@ class MusicCognitionPlatform {
             
             // Setup hardware interface
             await this.initializeHardware();
+            
+            // Setup Microbit listeners
+            this.setupMicrobitListeners();
             
             // Setup event listeners
             this.setupEventListeners();
@@ -90,20 +95,8 @@ class MusicCognitionPlatform {
 
     async initializeHardware() {
         try {
-            // Initialize Microbit interface
-            this.microbitInterface = new MicrobitInterface(this);
-            
-            // Check for hardware connection
-            const result = await ipcRenderer.invoke('setup-microbit');
-            if (result.success) {
-                this.hardwareReady = true;
-                this.updateStatus('microbitStatus', 'Microbit: Connected', 'success');
-                console.log('Microbit connected:', result.port);
-            } else {
-                this.updateStatus('microbitStatus', 'Microbit: Not Found', 'warning');
-                console.log('Microbit not found, using keyboard fallback');
-                this.setupKeyboardFallback();
-            }
+            // Check Microbit connection status
+            await this.checkMicrobitConnection();
             
         } catch (error) {
             console.error('Hardware initialization error:', error);
@@ -111,6 +104,219 @@ class MusicCognitionPlatform {
             this.setupKeyboardFallback();
         }
     }
+
+    async checkMicrobitConnection() {
+        try {
+            const status = await ipcRenderer.invoke('get-microbit-status');
+            this.microbitConnected = status.connected;
+            
+            if (status.connected) {
+                this.hardwareReady = true;
+                this.updateStatus('microbitStatus', `Microbit: ${status.connectionCount} Connected`, 'success');
+                console.log(`✅ Connected to ${status.connectionCount} Microbit(s)`);
+                
+                // Show success LED pattern
+                await this.onGameStart();
+            } else {
+                this.updateStatus('microbitStatus', 'Microbit: Not Found', 'warning');
+                console.log('Microbit not found, using keyboard fallback');
+                this.setupKeyboardFallback();
+            }
+        } catch (error) {
+            console.error('Microbit connection check error:', error);
+            this.updateStatus('microbitStatus', 'Microbit: Not Available', 'warning');
+            this.setupKeyboardFallback();
+        }
+    }
+
+    setupMicrobitListeners() {
+        console.log('Setting up Microbit event listeners...');
+        
+        // Listen for button press events from Microbits
+        ipcRenderer.on('microbit-button-press', (event, data) => {
+            console.log(`🎮 Microbit Button Press: ${data.color} Button ${data.button} (${data.position})`);
+            
+            // Update button state
+            this.buttonStates[data.button - 1] = true;
+            
+            // Forward to current test
+            this.handleButtonPress(data.button - 1, performance.now(), data);
+            
+            // Visual feedback
+            this.visualizeButtonPress(data.button - 1);
+        });
+
+        // Listen for button release events
+        ipcRenderer.on('microbit-button-release', (event, data) => {
+            console.log(`🎮 Microbit Button Release: ${data.color} Button ${data.button} (${data.position})`);
+            
+            // Update button state
+            this.buttonStates[data.button - 1] = false;
+            
+            // Forward to current test
+            this.handleButtonRelease(data.button - 1, performance.now(), data);
+            
+            // Visual feedback
+            this.visualizeButtonRelease(data.button - 1);
+        });
+
+        // Listen for Microbit status updates
+        ipcRenderer.on('microbit-status', (event, data) => {
+            console.log('Microbit status update:', data);
+            if (data.status === 'connected') {
+                this.microbitConnected = true;
+                this.hardwareReady = true;
+                this.updateStatus('microbitStatus', 'Microbit: Connected', 'success');
+            }
+        });
+    }
+
+    // ========================================
+    // LED CONTROL METHODS
+    // ========================================
+
+    async setLED(buttonNumber, state) {
+        try {
+            const result = await ipcRenderer.invoke('set-led', buttonNumber, state);
+            if (result.success) {
+                console.log(`💡 LED ${buttonNumber} set to ${state ? 'ON' : 'OFF'}`);
+            }
+            return result.success;
+        } catch (error) {
+            console.error('Error controlling LED:', error);
+            return false;
+        }
+    }
+
+    async setAllLEDs(state) {
+        try {
+            const result = await ipcRenderer.invoke('set-all-leds', state);
+            if (result.success) {
+                console.log(`💡 All LEDs set to ${state ? 'ON' : 'OFF'}`);
+            }
+            return result.success;
+        } catch (error) {
+            console.error('Error controlling all LEDs:', error);
+            return false;
+        }
+    }
+
+    async flashLED(buttonNumber, times = 3, duration = 500) {
+        try {
+            const result = await ipcRenderer.invoke('flash-led', buttonNumber, times, duration);
+            return result.success;
+        } catch (error) {
+            console.error('Error flashing LED:', error);
+            return false;
+        }
+    }
+
+    async flashAllLEDs(times = 3, duration = 300) {
+        try {
+            const result = await ipcRenderer.invoke('flash-all-leds', times, duration);
+            return result.success;
+        } catch (error) {
+            console.error('Error flashing all LEDs:', error);
+            return false;
+        }
+    }
+
+    async chaseLEDs(rounds = 2, speed = 200) {
+        try {
+            const result = await ipcRenderer.invoke('chase-leds', rounds, speed);
+            return result.success;
+        } catch (error) {
+            console.error('Error running LED chase:', error);
+            return false;
+        }
+    }
+
+    async randomLEDSequence(count = 4, onDuration = 500, offDuration = 100, totalSequences = 1) {
+        try {
+            const result = await ipcRenderer.invoke('random-led-sequence', count, onDuration, offDuration, totalSequences);
+            return result.success;
+        } catch (error) {
+            console.error('Error running random LED sequence:', error);
+            return false;
+        }
+    }
+
+    async randomFlashSequence(sequences = 3, flashDuration = 500) {
+        try {
+            const result = await ipcRenderer.invoke('random-flash-sequence', sequences, flashDuration);
+            return result.success;
+        } catch (error) {
+            console.error('Error running random flash sequence:', error);
+            return false;
+        }
+    }
+
+    async randomLEDGame(rounds = 5, speed = 600) {
+        try {
+            const result = await ipcRenderer.invoke('random-led-game', rounds, speed);
+            return result.success;
+        } catch (error) {
+            console.error('Error running random LED game:', error);
+            return false;
+        }
+    }
+
+    async simonSaysPattern(patternLength = 4, playbackSpeed = 800) {
+        try {
+            const result = await ipcRenderer.invoke('simon-says-pattern', patternLength, playbackSpeed);
+            if (result.success) {
+                return result.pattern;
+            }
+            return null;
+        } catch (error) {
+            console.error('Error running Simon Says pattern:', error);
+            return null;
+        }
+    }
+
+    async randomCascade(waves = 3, waveSpeed = 200) {
+        try {
+            const result = await ipcRenderer.invoke('random-cascade', waves, waveSpeed);
+            return result.success;
+        } catch (error) {
+            console.error('Error running random cascade:', error);
+            return false;
+        }
+    }
+
+    async rhythmicRandomPattern(beats = 8, tempo = 600) {
+        try {
+            const result = await ipcRenderer.invoke('rhythmic-random-pattern', beats, tempo);
+            return result.success;
+        } catch (error) {
+            console.error('Error running rhythmic pattern:', error);
+            return false;
+        }
+    }
+
+    // Game Event LED Patterns
+    async onGameStart() {
+        console.log('🎮 Game start LED pattern');
+        await ipcRenderer.invoke('game-start-pattern');
+    }
+
+    async onGameOver() {
+        console.log('🎮 Game over LED pattern');
+        await ipcRenderer.invoke('game-over-pattern');
+    }
+
+    async onGameWin() {
+        console.log('🎮 Game win LED pattern');
+        await ipcRenderer.invoke('game-win-pattern');
+    }
+
+    delay(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    // ========================================
+    // EVENT LISTENERS SETUP
+    // ========================================
 
     setupEventListeners() {
         // IPC listeners
@@ -370,7 +576,8 @@ class MusicCognitionPlatform {
         
         document.addEventListener('keydown', (event) => {
             const buttonIndex = keyMap[event.code];
-            if (buttonIndex !== undefined) {
+            if (buttonIndex !== undefined && !this.buttonStates[buttonIndex]) {
+                this.buttonStates[buttonIndex] = true;
                 this.handleButtonPress(buttonIndex, performance.now());
                 this.visualizeButtonPress(buttonIndex);
             }
@@ -379,6 +586,7 @@ class MusicCognitionPlatform {
         document.addEventListener('keyup', (event) => {
             const buttonIndex = keyMap[event.code];
             if (buttonIndex !== undefined) {
+                this.buttonStates[buttonIndex] = false;
                 this.handleButtonRelease(buttonIndex, performance.now());
                 this.visualizeButtonRelease(buttonIndex);
             }
@@ -387,7 +595,10 @@ class MusicCognitionPlatform {
         console.log('Keyboard fallback enabled (A, S, D, F keys)');
     }
 
-    // Screen Management
+    // ========================================
+    // SCREEN MANAGEMENT
+    // ========================================
+
     showScreen(screenId, data = null) {
         // Hide all screens
         document.querySelectorAll('.screen').forEach(screen => {
@@ -424,7 +635,10 @@ class MusicCognitionPlatform {
         }
     }
 
-    // Session Management
+    // ========================================
+    // SESSION MANAGEMENT
+    // ========================================
+
     async handleParticipantSubmit(event) {
         try {
             this.showLoading('Creating session...');
@@ -473,7 +687,10 @@ class MusicCognitionPlatform {
         }
     }
 
-    // Test Selection
+    // ========================================
+    // TEST SELECTION
+    // ========================================
+
     toggleTestSelection(card) {
         card.classList.toggle('selected');
         this.updateTestSelection();
@@ -510,7 +727,10 @@ class MusicCognitionPlatform {
         console.log(`Selected conditions: ${selectedConditions.join(', ')}`);
     }
 
-    // Test Execution
+    // ========================================
+    // TEST EXECUTION
+    // ========================================
+
     async startTestBattery() {
         try {
             if (!this.currentSession) {
@@ -523,11 +743,19 @@ class MusicCognitionPlatform {
             const selectedConditions = Array.from(document.querySelectorAll('.condition-selection input:checked'))
                 .map(checkbox => checkbox.value);
             
+            if (selectedTests.length === 0 || selectedConditions.length === 0) {
+                alert('Please select at least one test and one music condition');
+                return;
+            }
+            
             // Create test queue with randomized order
             this.testQueue = this.createTestQueue(selectedTests, selectedConditions);
             this.testIndex = 0;
             
             console.log(`Starting test battery with ${this.testQueue.length} tests`);
+            
+            // Show test screen
+            this.showScreen('testScreen');
             
             // Start first test
             await this.startNextTest();
@@ -574,15 +802,18 @@ class MusicCognitionPlatform {
         
         const testConfig = this.testQueue[this.testIndex];
         
+        // Update progress
+        this.updateTestProgress();
+        
+        // Show test info
+        document.getElementById('currentTestName').textContent = 
+            `${testConfig.config.name} - ${testConfig.musicCondition}`;
+        
         try {
             // Setup music condition
             await this.setupMusicCondition(testConfig.musicCondition);
             
-            // Show test screen
-            this.showScreen('testScreen');
-            
             // Update UI
-            this.updateTestProgress();
             this.updateMusicIndicator(testConfig.musicCondition);
             
             // Initialize test instance
@@ -591,18 +822,181 @@ class MusicCognitionPlatform {
         } catch (error) {
             console.error('Test start error:', error);
             this.showError('Test Failed', error.message);
+            
+            // Skip to next test
+            this.testIndex++;
+            this.startNextTest();
         }
     }
+
+    async initializeTest(testConfig) {
+        console.log(`Initializing test: ${testConfig.testType}`);
+        
+        // Get test class
+        const TestClass = this.getTestClass(testConfig.testType);
+        if (!TestClass) {
+            console.error(`Test class not found: ${testConfig.testType}`);
+            this.testIndex++;
+            this.startNextTest();
+            return;
+        }
+        
+        // Create test instance
+        this.testInstance = new TestClass(testConfig.config, this);
+        
+        // Initialize and run test
+        try {
+            await this.testInstance.initialize();
+        } catch (error) {
+            console.error('Test initialization error:', error);
+            this.testIndex++;
+            this.startNextTest();
+        }
+    }
+
+    getTestClass(testType) {
+        const testClasses = {
+            'simple-reaction': typeof SimpleReactionTest !== 'undefined' ? SimpleReactionTest : null,
+            'choice-reaction': typeof ChoiceReactionTest !== 'undefined' ? ChoiceReactionTest : null,
+            'vigilance': typeof VigilanceTest !== 'undefined' ? VigilanceTest : null,
+            'n-back': typeof NBackTest !== 'undefined' ? NBackTest : null,
+            'rhythm-sync': typeof RhythmSyncTest !== 'undefined' ? RhythmSyncTest : null,
+            'multi-stream': typeof MultiStreamTest !== 'undefined' ? MultiStreamTest : null,
+            'stroop': typeof StroopTest !== 'undefined' ? StroopTest : null,
+            'dual-task': typeof DualTaskTest !== 'undefined' ? DualTaskTest : null
+        };
+        
+        return testClasses[testType];
+    }
+
+    async completeCurrentTest() {
+        if (!this.testInstance) return;
+        
+        try {
+            // Get test results
+            const testResults = await this.testInstance.complete();
+            
+            // Add music condition info
+            testResults.musicCondition = this.testQueue[this.testIndex].musicCondition;
+            testResults.buttonConfig = this.testInstance.config.buttonConfig;
+            
+            // Save test data
+            const result = await ipcRenderer.invoke('save-test-data', testResults);
+            
+            if (result.success) {
+                console.log('Test data saved:', result.testId);
+            }
+            
+            // Clean up
+            this.testInstance.destroy();
+            this.testInstance = null;
+            
+            // Stop music
+            this.stopMusic();
+            
+            // Short break before next test
+            await this.showInterTestBreak();
+            
+            // Move to next test
+            this.testIndex++;
+            await this.startNextTest();
+            
+        } catch (error) {
+            console.error('Error completing test:', error);
+        }
+    }
+
+    async showInterTestBreak() {
+        const testContent = document.getElementById('testContent');
+        if (!testContent) return;
+        
+        testContent.innerHTML = `
+            <div class="inter-test-break">
+                <h2>Test Complete!</h2>
+                <p>Take a short break before the next test</p>
+                <div class="break-timer" id="breakTimer">30</div>
+                <p>Next test will start automatically...</p>
+                <button class="btn-primary" id="skipBreakBtn">Skip Break</button>
+            </div>
+        `;
+        
+        // LED celebration pattern
+        await this.randomCascade(2, 150);
+        
+        // Countdown
+        let remaining = 30;
+        const breakTimer = document.getElementById('breakTimer');
+        const skipBtn = document.getElementById('skipBreakBtn');
+        
+        return new Promise((resolve) => {
+            const countdown = setInterval(() => {
+                remaining--;
+                if (breakTimer) {
+                    breakTimer.textContent = remaining;
+                }
+                
+                if (remaining <= 0) {
+                    clearInterval(countdown);
+                    resolve();
+                }
+            }, 1000);
+            
+            if (skipBtn) {
+                skipBtn.onclick = () => {
+                    clearInterval(countdown);
+                    resolve();
+                };
+            }
+        });
+    }
+
+    async completeTestBattery() {
+        console.log('Test battery complete!');
+        
+        // Turn off all LEDs
+        await this.setAllLEDs(false);
+        
+        // Show completion
+        await this.onGameWin();
+        
+        // Update session
+        await ipcRenderer.invoke('update-session', {
+            status: 'completed',
+            endTime: new Date().toISOString()
+        });
+        
+        // Show results
+        this.showScreen('resultsScreen');
+        await this.displaySessionSummary();
+    }
+
+    updateTestProgress() {
+        const progressFill = document.getElementById('testProgress');
+        const progressText = document.getElementById('progressText');
+        const testName = document.getElementById('currentTestName');
+        
+        if (progressFill && progressText && testName) {
+            const progress = (this.testIndex / this.testQueue.length) * 100;
+            progressFill.style.width = `${progress}%`;
+            progressText.textContent = `${this.testIndex + 1} / ${this.testQueue.length}`;
+            
+            const currentTest = this.testQueue[this.testIndex];
+            if (currentTest) {
+                testName.textContent = currentTest.config.name;
+            }
+        }
+    }
+
+    // ========================================
+    // MUSIC MANAGEMENT
+    // ========================================
 
     async setupMusicCondition(conditionKey) {
         const condition = this.musicConditions[conditionKey];
         
         if (condition.type === 'none') {
             // Silence - stop any current audio
-            if (this.audioSource) {
-                this.audioSource.stop();
-                this.audioSource = null;
-            }
+            this.stopMusic();
             
         } else if (condition.type === 'audio') {
             // Load and play audio file
@@ -614,6 +1008,11 @@ class MusicCognitionPlatform {
         }
         
         console.log(`Music condition set to: ${condition.name}`);
+        
+        // LED pattern to indicate music starting
+        if (condition.type !== 'none') {
+            await this.chaseLEDs(1, 100);
+        }
     }
 
     async loadAndPlayAudio(filePath) {
@@ -636,7 +1035,9 @@ class MusicCognitionPlatform {
             this.audioSource.loop = true;
             
             // Connect to analyzer and destination
-            this.musicAnalyzer.connectSource(this.audioSource);
+            if (this.musicAnalyzer) {
+                this.musicAnalyzer.connectSource(this.audioSource);
+            }
             this.audioSource.connect(this.audioContext.destination);
             
             // Start playback
@@ -713,18 +1114,14 @@ class MusicCognitionPlatform {
         };
     }
 
-    updateTestProgress() {
-        const progressFill = document.getElementById('testProgress');
-        const progressText = document.getElementById('progressText');
-        const testName = document.getElementById('currentTestName');
-        
-        if (progressFill && progressText && testName) {
-            const progress = (this.testIndex / this.testQueue.length) * 100;
-            progressFill.style.width = `${progress}%`;
-            progressText.textContent = `${this.testIndex + 1} / ${this.testQueue.length}`;
-            
-            const currentTest = this.testQueue[this.testIndex];
-            testName.textContent = currentTest.config.name;
+    stopMusic() {
+        if (this.audioSource) {
+            try {
+                this.audioSource.stop();
+            } catch (e) {
+                // Ignore if already stopped
+            }
+            this.audioSource = null;
         }
     }
 
@@ -736,12 +1133,16 @@ class MusicCognitionPlatform {
         }
     }
 
-    // Button handling
-    handleButtonPress(buttonIndex, timestamp) {
+    // ========================================
+    // BUTTON HANDLING
+    // ========================================
+
+    handleButtonPress(buttonIndex, timestamp, data = null) {
         // Log raw button data
         this.dataLogger.logEvent({
             type: 'button_press',
             button: buttonIndex,
+            buttonData: data,
             timestamp: timestamp,
             musicTime: this.getCurrentMusicTime(),
             testPhase: this.getCurrentTestPhase()
@@ -749,20 +1150,32 @@ class MusicCognitionPlatform {
         
         // Forward to current test
         if (this.testInstance && this.testInstance.handleButtonPress) {
-            this.testInstance.handleButtonPress(buttonIndex, timestamp);
+            // Convert 0-based index to 1-based for test
+            const buttonData = {
+                button: buttonIndex + 1,
+                timestamp: timestamp,
+                ...data
+            };
+            this.testInstance.handleButtonPress(buttonData);
         }
     }
 
-    handleButtonRelease(buttonIndex, timestamp) {
+    handleButtonRelease(buttonIndex, timestamp, data = null) {
         this.dataLogger.logEvent({
             type: 'button_release',
             button: buttonIndex,
+            buttonData: data,
             timestamp: timestamp,
             musicTime: this.getCurrentMusicTime()
         });
         
         if (this.testInstance && this.testInstance.handleButtonRelease) {
-            this.testInstance.handleButtonRelease(buttonIndex, timestamp);
+            const buttonData = {
+                button: buttonIndex + 1,
+                timestamp: timestamp,
+                ...data
+            };
+            this.testInstance.handleButtonRelease(buttonData);
         }
     }
 
@@ -788,7 +1201,65 @@ class MusicCognitionPlatform {
         }
     }
 
-    // Utility methods
+    // ========================================
+    // RESULTS & DATA EXPORT
+    // ========================================
+
+    async displaySessionSummary() {
+        const resultsContent = document.getElementById('resultsContent');
+        if (!resultsContent) return;
+        
+        const session = await ipcRenderer.invoke('get-current-session');
+        
+        if (!session || !session.tests) {
+            resultsContent.innerHTML = '<p>No test data available</p>';
+            return;
+        }
+        
+        let summaryHTML = `
+            <h2>Session Summary</h2>
+            <div class="session-overview">
+                <p><strong>Participant:</strong> ${session.participant.id}</p>
+                <p><strong>Tests Completed:</strong> ${session.tests.length}</p>
+                <p><strong>Duration:</strong> ${this.formatDuration(
+                    new Date(session.endTime) - new Date(session.startTime)
+                )}</p>
+            </div>
+            <div class="test-results">
+        `;
+        
+        session.tests.forEach(test => {
+            summaryHTML += `
+                <div class="test-result-card">
+                    <h3>${test.testName}</h3>
+                    <p><strong>Music:</strong> ${test.musicCondition}</p>
+                    <div class="metrics">
+            `;
+            
+            for (const [key, value] of Object.entries(test.metrics)) {
+                summaryHTML += `<div class="metric"><span>${key}:</span> <strong>${value}</strong></div>`;
+            }
+            
+            summaryHTML += `
+                    </div>
+                </div>
+            `;
+        });
+        
+        summaryHTML += '</div>';
+        resultsContent.innerHTML = summaryHTML;
+    }
+
+    formatDuration(ms) {
+        const minutes = Math.floor(ms / 60000);
+        const seconds = Math.floor((ms % 60000) / 1000);
+        return `${minutes}m ${seconds}s`;
+    }
+
+    // ========================================
+    // UTILITY METHODS
+    // ========================================
+
     getCurrentMusicTime() {
         if (this.audioContext && this.audioSource) {
             return this.audioContext.currentTime * 1000; // Convert to milliseconds
@@ -797,7 +1268,7 @@ class MusicCognitionPlatform {
     }
 
     getCurrentTestPhase() {
-        return this.testInstance ? this.testInstance.getCurrentPhase() : 'none';
+        return this.testInstance ? this.testInstance.getCurrentPhase?.() || 'active' : 'none';
     }
 
     updateStatus(elementId, text, type = 'info') {
@@ -805,6 +1276,18 @@ class MusicCognitionPlatform {
         if (element) {
             element.textContent = text;
             element.className = `status-item ${type}`;
+        }
+    }
+
+    updateSystemStatus() {
+        // Update hardware status
+        const hardwareCard = document.getElementById('hardwareStatus');
+        if (hardwareCard) {
+            const statusSpan = hardwareCard.querySelector('.status-text span');
+            if (statusSpan) {
+                statusSpan.textContent = this.hardwareReady ? 'Ready' : 'Checking...';
+                statusSpan.className = this.hardwareReady ? 'success' : 'warning';
+            }
         }
     }
 
@@ -822,11 +1305,11 @@ class MusicCognitionPlatform {
     }
 
     setVolume(volume) {
-        if (this.audioSource && this.audioSource.connect) {
+        if (this.audioSource && this.audioContext) {
             const gainNode = this.audioContext.createGain();
             gainNode.gain.value = volume;
-            // Reconnect with gain control
-            // Note: This is a simplified implementation
+            // Note: Simplified implementation
+            console.log(`Volume set to: ${(volume * 100).toFixed(0)}%`);
         }
     }
 
@@ -848,50 +1331,73 @@ class MusicCognitionPlatform {
     }
 
     showError(title, message) {
-        // Simple error display - could be enhanced with modal
         alert(`${title}\n\n${message}`);
     }
 
-    // This will be expanded with actual test implementations
-    async initializeTest(testConfig) {
-        console.log(`Initializing test: ${testConfig.testType}`);
-        // Test implementation will go here
-    }
-
-    async completeTestBattery() {
-        console.log('Test battery completed');
-        this.showScreen('resultsScreen', this.currentSession);
-    }
-
-    // Placeholder methods for missing functionality
+    // Placeholder methods for features not yet implemented
     startCalibration() {
         console.log('Calibration not yet implemented');
+        alert('Calibration feature coming soon!');
     }
 
     pauseCurrentTest() {
         console.log('Pause not yet implemented');
+        if (this.testInstance && this.testInstance.pause) {
+            this.testInstance.pause();
+        }
     }
 
     stopCurrentTest() {
-        console.log('Stop not yet implemented');
+        if (confirm('Are you sure you want to stop the current test? Progress will be lost.')) {
+            if (this.testInstance) {
+                this.testInstance.destroy();
+                this.testInstance = null;
+            }
+            this.stopMusic();
+            this.showScreen('testSelectionScreen', this.currentSession);
+        }
     }
 
-    exportResults() {
-        console.log('Export not yet implemented');
+    async exportResults() {
+        try {
+            // Trigger main process export
+            await ipcRenderer.invoke('export-session-data');
+        } catch (error) {
+            console.error('Export error:', error);
+            this.showError('Export Failed', error.message);
+        }
     }
 
     async loadSession() {
-        console.log('Load session not yet implemented');
+        console.log('Load session triggered');
+        // This will be handled by main process
+    }
+
+    initializeTestScreen(data) {
+        console.log('Test screen initialized');
     }
 
     populateResults(session) {
-        console.log('Results population not yet implemented');
+        this.displaySessionSummary();
     }
 }
+
+// Add keyboard shortcut to open LED test panel
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'L' && e.ctrlKey) {
+        e.preventDefault();
+        if (window.platform) {
+            window.platform.createLEDTestPanel?.();
+        }
+    }
+});
 
 // Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
     if (typeof MusicCognitionPlatform !== 'undefined') {
         window.platform = new MusicCognitionPlatform();
+        console.log('✅ Music Cognition Platform initialized');
+    } else {
+        console.error('❌ MusicCognitionPlatform class not found!');
     }
 });

@@ -15,8 +15,6 @@ let currentSession = null;
 
 // Microbit Hardware Controller
 let microbitController = null;
-let SerialPort = null;
-let ReadlineParser = null;
 
 // Ensure data directory exists
 if (!fs.existsSync(dataDir)) {
@@ -40,8 +38,9 @@ class MicrobitHardwareController {
 
     async initialize() {
         try {
-            // Load SerialPort modules
-            SerialPort = require('serialport');
+            // Load SerialPort modules - v12.x API
+            const { SerialPort: SP } = require('serialport');
+            SerialPort = SP;
             const { ReadlineParser: Parser } = require('@serialport/parser-readline');
             ReadlineParser = Parser;
             
@@ -72,7 +71,9 @@ class MicrobitHardwareController {
     }
 
     async connectAllMicrobits() {
-        const ports = await SerialPort.list();
+        // Use the static list method from SerialPort class (v12.x API)
+        const { SerialPort: SP } = require('serialport');
+        const ports = await SP.list();
         
         // Find all Microbit ports
         const microbitPorts = ports.filter(port => 
@@ -96,7 +97,11 @@ class MicrobitHardwareController {
 
     async connectMicrobit(portInfo, index) {
         return new Promise((resolve, reject) => {
-            const port = new SerialPort({
+            // Use the imported SerialPort constructor (v12.x API)
+            const { SerialPort: SP } = require('serialport');
+            const { ReadlineParser } = require('@serialport/parser-readline');
+            
+            const port = new SP({
                 path: portInfo.path,
                 baudRate: this.baudRate,
                 autoOpen: false

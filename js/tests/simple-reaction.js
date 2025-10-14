@@ -1,599 +1,198 @@
-// js/tests/simple-reaction.js - Simple Reaction Time Test Implementation
+// js/tests/simple-reaction.js - Simple Reaction Time Test
 
-class SimpleReactionTest {
-    constructor(canvas, ctx, platform, config) {
-        this.canvas = canvas;
-        this.ctx = ctx;
-        this.platform = platform;
-        this.config = config;
-        
-        // Scale factors
-        this.scaleX = canvas.width / 800;
-        this.scaleY = canvas.height / 600;
-        
-        // Test parameters
-        this.duration = config.duration || 120000; // 2 minutes
-        this.minInterval = 1000; // Minimum 1 second between stimuli
-        this.maxInterval = 4000; // Maximum 4 seconds between stimuli
-        
-        // Stimulus properties
-        this.stimulusSize = 80 * Math.min(this.scaleX, this.scaleY);
-        this.stimulusColor = '#ff4444';
-        this.stimulusActive = false;
-        this.stimulusOnsetTime = 0;
-        
-        // Test state
-        this.running = false;
-        this.started = false;
-        this.startTime = 0;
-        this.nextStimulusTime = 0;
-        this.trialCount = 0;
-        this.responseCount = 0;
-        
-        // Data collection
+class SimpleReactionTest extends CognitionTestBase {
+    constructor(config, platform) {
+        super(config, platform);
+        this.stimulusInterval = null;
+        this.stimulusStartTime = null;
+        this.waitingForResponse = false;
+        this.minInterval = 2000;  // Minimum 2 seconds between stimuli
+        this.maxInterval = 5000;  // Maximum 5 seconds between stimuli
         this.reactionTimes = [];
-        this.missedStimuli = 0;
-        this.falseStarts = 0;
-        this.currentTrial = null;
-        
-        // Visual feedback
-        this.feedbackText = '';
-        this.feedbackColor = '#ffffff';
-        this.feedbackTimer = 0;
-        
-        // Instructions phase
-        this.showingInstructions = true;
-        this.instructionPhase = 0; // 0=intro, 1=ready, 2=running
-        
-        this.initialize();
     }
 
-    initialize() {
-        // Start with instructions
-        this.showingInstructions = true;
-        this.instructionPhase = 0;
-        
-        // Set up canvas
-        this.canvas.width = Math.min(800 * this.scaleX, this.canvas.clientWidth);
-        this.canvas.height = Math.min(600 * this.scaleY, this.canvas.clientHeight);
-        
-        // Begin render loop
-        this.gameLoop = this.gameLoop.bind(this);
-        this.gameLoop();
-        
-        console.log('Simple Reaction Test initialized');
+    async setupLEDPatterns() {
+        // Turn off all LEDs initially
+        await this.platform.setAllLEDs(false);
     }
 
-    handleButtonPress(buttonIndex, timestamp) {
-        // Only respond to button 0 (first button)
-        if (buttonIndex !== 0) return;
-        
-        if (this.showingInstructions) {
-            this.handleInstructionAdvance();
-            return;
-        }
-        
-        if (!this.running) return;
-        
-        if (this.stimulusActive) {
-            // Valid response
-            const reactionTime = timestamp - this.stimulusOnsetTime;
-            this.handleValidResponse(reactionTime, timestamp);
-        } else {
-            // False start (response without stimulus)
-            this.handleFalseStart(timestamp);
-        }
-    }
+    async runTest() {
+        const testContent = document.getElementById('testContent');
+        testContent.innerHTML = `
+            <div class="simple-reaction-test">
+                <div class="fixation-point">+</div>
+                <div class="stimulus-area" id="stimulusArea"></div>
+                <div class="test-info">
+                    <p>Press GREEN button as quickly as possible when it lights up</p>
+                    <div class="trial-counter">Trial: <span id="trialCount">0</span></div>
+                    <div class="time-remaining">Time: <span id="timeRemaining"></span></div>
+                </div>
+            </div>
+        `;
 
-    handleButtonRelease(buttonIndex, timestamp) {
-        // Not used in this test
-    }
-
-    handleInstructionAdvance() {
-        switch (this.instructionPhase) {
-            case 0: // Show ready screen
-                this.instructionPhase = 1;
-                break;
-            case 1: // Start test
-                this.startTest();
-                break;
-        }
-    }
-
-    startTest() {
-        this.showingInstructions = false;
-        this.running = true;
-        this.started = true;
-        this.startTime = performance.now();
-        
-        // Schedule first stimulus
+        this.updateTimer();
         this.scheduleNextStimulus();
-        
-        // Log test start
-        this.platform.dataLogger.startTest({
-            testType: 'simple-reaction',
-            duration: this.duration,
-            config: this.config
-        });
-        
-        // Update UI
-        this.updateStats();
-        
-        console.log('Simple Reaction Test started');
     }
 
     scheduleNextStimulus() {
-        if (!this.running) return;
+        if (!this.isRunning) return;
         
-        // Random interval between min and max
-        const interval = this.minInterval + Math.random() * (this.maxInterval - this.minInterval);
-        this.nextStimulusTime = performance.now() + interval;
+        const timeElapsed = Date.now() - this.startTime;
+        if (timeElapsed >= this.config.duration) {
+            this.complete();
+            return;
+        }
+
+        // Random interval between stimuli
+        const interval = Math.random() * (this.maxInterval - this.minInterval) + this.minInterval;
         
-        // Log stimulus scheduling
-        this.platform.dataLogger.logEvent({
-            type: 'stimulus_scheduled',
-            timestamp: performance.now(),
-            scheduledTime: this.nextStimulusTime,
-            interval: interval
+        this.stimulusInterval = setTimeout(() => {
+            this.presentStimulus();
+        }, interval);
+    }
+
+    async presentStimulus() {
+        if (!this.isRunning) return;
+
+        this.currentTrial++;
+        document.getElementById('trialCount').textContent = this.currentTrial;
+
+        // Visual stimulus
+        const stimulusArea = document.getElementById('stimulusArea');
+        stimulusArea.classList.add('active');
+        stimulusArea.style.backgroundColor = '#00ff00';
+
+        // LED stimulus - turn on green button
+        await this.platform.setLED(1, true);
+        
+        this.stimulusStartTime = Date.now();
+        this.waitingForResponse = true;
+
+        // Record stimulus presentation
+        this.testData.push({
+            type: 'stimulus',
+            trial: this.currentTrial,
+            timestamp: this.stimulusStartTime,
+            relativeTime: this.stimulusStartTime - this.startTime
         });
     }
 
-    showStimulus() {
-        this.stimulusActive = true;
-        this.stimulusOnsetTime = performance.now();
-        this.trialCount++;
+    handleButtonPress(buttonData) {
+        if (this.instructionResolver) {
+            super.handleButtonPress(buttonData);
+            return;
+        }
+
+        if (!this.isRunning) return;
+
+        const responseTime = Date.now();
+        const reactionTime = responseTime - this.stimulusStartTime;
+
+        if (this.waitingForResponse && buttonData.button === 1) {
+            // Correct response
+            this.waitingForResponse = false;
+            this.reactionTimes.push(reactionTime);
+
+            // Visual feedback
+            const stimulusArea = document.getElementById('stimulusArea');
+            stimulusArea.classList.remove('active');
+            stimulusArea.style.backgroundColor = 'transparent';
+
+            // Turn off LED
+            this.platform.setLED(1, false);
+
+            // Record response
+            this.testData.push({
+                type: 'response',
+                trial: this.currentTrial,
+                timestamp: responseTime,
+                relativeTime: responseTime - this.startTime,
+                button: buttonData.button,
+                reactionTime: reactionTime,
+                correct: true
+            });
+
+            // Brief feedback LED flash
+            setTimeout(() => {
+                this.platform.flashLED(1, 1, 100);
+            }, 200);
+
+            // Schedule next stimulus
+            this.scheduleNextStimulus();
+
+        } else if (!this.waitingForResponse) {
+            // False alarm - pressed before stimulus
+            this.testData.push({
+                type: 'false_alarm',
+                trial: this.currentTrial,
+                timestamp: responseTime,
+                relativeTime: responseTime - this.startTime,
+                button: buttonData.button
+            });
+
+            // Penalty feedback
+            this.platform.flashLED(buttonData.button, 3, 100);
+        }
+    }
+
+    updateTimer() {
+        if (!this.isRunning) return;
+
+        const elapsed = Date.now() - this.startTime;
+        const remaining = Math.max(0, this.config.duration - elapsed);
+        const seconds = Math.floor(remaining / 1000);
+        const minutes = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+
+        const timeDisplay = document.getElementById('timeRemaining');
+        if (timeDisplay) {
+            timeDisplay.textContent = `${minutes}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        if (remaining > 0) {
+            setTimeout(() => this.updateTimer(), 100);
+        }
+    }
+
+    calculateMetrics() {
+        if (this.reactionTimes.length === 0) {
+            return {
+                meanRT: null,
+                medianRT: null,
+                sdRT: null,
+                trialCount: this.currentTrial
+            };
+        }
+
+        const sorted = [...this.reactionTimes].sort((a, b) => a - b);
+        const mean = this.reactionTimes.reduce((a, b) => a + b, 0) / this.reactionTimes.length;
+        const median = sorted[Math.floor(sorted.length / 2)];
         
-        this.currentTrial = {
-            trialNumber: this.trialCount,
-            stimulusOnset: this.stimulusOnsetTime,
-            responded: false
+        const variance = this.reactionTimes.reduce((sum, rt) => {
+            return sum + Math.pow(rt - mean, 2);
+        }, 0) / this.reactionTimes.length;
+        const sd = Math.sqrt(variance);
+
+        // Count false alarms
+        const falseAlarms = this.testData.filter(d => d.type === 'false_alarm').length;
+
+        return {
+            meanRT: Math.round(mean),
+            medianRT: Math.round(median),
+            sdRT: Math.round(sd),
+            minRT: Math.round(Math.min(...this.reactionTimes)),
+            maxRT: Math.round(Math.max(...this.reactionTimes)),
+            trialCount: this.currentTrial,
+            validTrials: this.reactionTimes.length,
+            falseAlarms: falseAlarms,
+            accuracy: (this.reactionTimes.length / this.currentTrial * 100).toFixed(1)
         };
-        
-        // Log stimulus onset
-        this.platform.dataLogger.logTrialStart(this.currentTrial);
-        this.platform.dataLogger.logStimulusOnset({
-            stimulusType: 'visual',
-            position: 'center',
-            color: this.stimulusColor,
-            size: this.stimulusSize
-        });
-        
-        // Set timeout for missed response (2 seconds)
-        this.stimulusTimeout = setTimeout(() => {
-            if (this.stimulusActive) {
-                this.handleMissedResponse();
-            }
-        }, 2000);
-        
-        console.log(`Stimulus ${this.trialCount} shown at ${this.stimulusOnsetTime}`);
-    }
-
-    handleValidResponse(reactionTime, timestamp) {
-        this.stimulusActive = false;
-        this.responseCount++;
-        this.currentTrial.responded = true;
-        this.currentTrial.reactionTime = reactionTime;
-        this.currentTrial.responseTime = timestamp;
-        
-        // Clear timeout
-        if (this.stimulusTimeout) {
-            clearTimeout(this.stimulusTimeout);
-            this.stimulusTimeout = null;
-        }
-        
-        // Store reaction time
-        this.reactionTimes.push(reactionTime);
-        
-        // Log response
-        const rtData = this.platform.dataLogger.logReactionTime(
-            this.stimulusOnsetTime, 
-            timestamp, 
-            true, 
-            {
-                trialNumber: this.trialCount,
-                stimulusType: 'visual'
-            }
-        );
-        
-        this.platform.dataLogger.logTrialEnd(this.currentTrial);
-        
-        // Provide feedback
-        this.showFeedback(reactionTime);
-        
-        // Update metrics
-        this.platform.metricsCollector.collectReactionTime(
-            this.stimulusOnsetTime, 
-            timestamp, 
-            true
-        );
-        
-        // Schedule next stimulus
-        this.scheduleNextStimulus();
-        
-        // Update UI
-        this.updateStats();
-        
-        console.log(`Valid response: ${reactionTime.toFixed(2)}ms`);
-    }
-
-    handleMissedResponse() {
-        this.stimulusActive = false;
-        this.missedStimuli++;
-        
-        if (this.currentTrial) {
-            this.currentTrial.missed = true;
-            this.platform.dataLogger.logTrialEnd(this.currentTrial);
-        }
-        
-        // Log missed response
-        this.platform.dataLogger.logEvent({
-            type: 'missed_response',
-            timestamp: performance.now(),
-            trialNumber: this.trialCount,
-            stimulusOnset: this.stimulusOnsetTime
-        });
-        
-        this.showFeedback(null, 'Too slow!', '#ff8800');
-        
-        // Schedule next stimulus
-        this.scheduleNextStimulus();
-        
-        console.log(`Missed stimulus ${this.trialCount}`);
-    }
-
-    handleFalseStart(timestamp) {
-        this.falseStarts++;
-        
-        // Log false start
-        this.platform.dataLogger.logEvent({
-            type: 'false_start',
-            timestamp: timestamp
-        });
-        
-        this.showFeedback(null, 'Too early!', '#ff4444');
-        
-        console.log('False start detected');
-    }
-
-    showFeedback(reactionTime, customText = null, customColor = null) {
-        if (customText) {
-            this.feedbackText = customText;
-            this.feedbackColor = customColor || '#ffffff';
-        } else if (reactionTime !== null) {
-            // Categorize reaction time
-            if (reactionTime < 150) {
-                this.feedbackText = 'Too fast!';
-                this.feedbackColor = '#ffaa00';
-            } else if (reactionTime < 250) {
-                this.feedbackText = `Excellent! ${reactionTime.toFixed(0)}ms`;
-                this.feedbackColor = '#00ff00';
-            } else if (reactionTime < 350) {
-                this.feedbackText = `Good! ${reactionTime.toFixed(0)}ms`;
-                this.feedbackColor = '#88ff88';
-            } else if (reactionTime < 500) {
-                this.feedbackText = `OK ${reactionTime.toFixed(0)}ms`;
-                this.feedbackColor = '#ffff88';
-            } else {
-                this.feedbackText = `Slow ${reactionTime.toFixed(0)}ms`;
-                this.feedbackColor = '#ff8888';
-            }
-        }
-        
-        this.feedbackTimer = 60; // Show for 1 second at 60fps
-    }
-
-    update() {
-        if (!this.running && !this.showingInstructions) return;
-        
-        const now = performance.now();
-        
-        if (this.running) {
-            // Check if test duration is complete
-            if (now - this.startTime >= this.duration) {
-                this.endTest();
-                return;
-            }
-            
-            // Check if it's time to show stimulus
-            if (!this.stimulusActive && now >= this.nextStimulusTime) {
-                this.showStimulus();
-            }
-            
-            // Update stats
-            this.updateStats();
-        }
-        
-        // Update feedback timer
-        if (this.feedbackTimer > 0) {
-            this.feedbackTimer--;
-        }
-    }
-
-    draw() {
-        // Clear canvas
-        this.ctx.fillStyle = '#000000';
-        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-        
-        if (this.showingInstructions) {
-            this.drawInstructions();
-        } else if (this.running) {
-            this.drawTest();
-        } else {
-            this.drawResults();
-        }
-    }
-
-    drawInstructions() {
-        const centerX = this.canvas.width / 2;
-        const centerY = this.canvas.height / 2;
-        
-        this.ctx.fillStyle = '#ffffff';
-        this.ctx.textAlign = 'center';
-        
-        if (this.instructionPhase === 0) {
-            // Introduction screen
-            this.ctx.font = `bold ${Math.max(32, 48 * this.scaleY)}px Arial`;
-            this.ctx.fillText('Simple Reaction Time Test', centerX, centerY - 120 * this.scaleY);
-            
-            this.ctx.font = `${Math.max(18, 24 * this.scaleY)}px Arial`;
-            this.ctx.fillText('A red circle will appear at random times', centerX, centerY - 60 * this.scaleY);
-            this.ctx.fillText('Press the RED button as quickly as possible', centerX, centerY - 30 * this.scaleY);
-            this.ctx.fillText('when you see the circle', centerX, centerY);
-            
-            this.ctx.fillStyle = '#ffaa00';
-            this.ctx.fillText('⚠️ Do NOT press before the circle appears', centerX, centerY + 40 * this.scaleY);
-            
-            this.ctx.fillStyle = '#00ff00';
-            this.ctx.font = `bold ${Math.max(20, 28 * this.scaleY)}px Arial`;
-            this.ctx.fillText('Press RED button to continue', centerX, centerY + 100 * this.scaleY);
-            
-        } else if (this.instructionPhase === 1) {
-            // Ready screen
-            this.ctx.font = `bold ${Math.max(36, 54 * this.scaleY)}px Arial`;
-            this.ctx.fillStyle = '#ffff00';
-            this.ctx.fillText('Get Ready!', centerX, centerY - 40 * this.scaleY);
-            
-            this.ctx.font = `${Math.max(20, 28 * this.scaleY)}px Arial`;
-            this.ctx.fillStyle = '#ffffff';
-            this.ctx.fillText(`Test Duration: ${this.duration / 1000} seconds`, centerX, centerY);
-            this.ctx.fillText('Stay focused and respond as quickly as possible', centerX, centerY + 30 * this.scaleY);
-            
-            this.ctx.fillStyle = '#00ff00';
-            this.ctx.font = `bold ${Math.max(22, 30 * this.scaleY)}px Arial`;
-            this.ctx.fillText('Press RED button to START', centerX, centerY + 80 * this.scaleY);
-        }
-    }
-
-    drawTest() {
-        const centerX = this.canvas.width / 2;
-        const centerY = this.canvas.height / 2;
-        
-        // Draw fixation cross when no stimulus
-        if (!this.stimulusActive) {
-            this.ctx.strokeStyle = '#666666';
-            this.ctx.lineWidth = 3;
-            const crossSize = 20 * Math.min(this.scaleX, this.scaleY);
-            
-            this.ctx.beginPath();
-            this.ctx.moveTo(centerX - crossSize, centerY);
-            this.ctx.lineTo(centerX + crossSize, centerY);
-            this.ctx.moveTo(centerX, centerY - crossSize);
-            this.ctx.lineTo(centerX, centerY + crossSize);
-            this.ctx.stroke();
-        }
-        
-        // Draw stimulus when active
-        if (this.stimulusActive) {
-            this.ctx.fillStyle = this.stimulusColor;
-            this.ctx.beginPath();
-            this.ctx.arc(centerX, centerY, this.stimulusSize / 2, 0, Math.PI * 2);
-            this.ctx.fill();
-            
-            // Add pulsing effect
-            const pulseAlpha = 0.3 + 0.3 * Math.sin((performance.now() - this.stimulusOnsetTime) * 0.01);
-            this.ctx.fillStyle = `rgba(255, 68, 68, ${pulseAlpha})`;
-            this.ctx.beginPath();
-            this.ctx.arc(centerX, centerY, this.stimulusSize / 2 + 10, 0, Math.PI * 2);
-            this.ctx.fill();
-        }
-        
-        // Draw feedback
-        if (this.feedbackTimer > 0) {
-            this.ctx.fillStyle = this.feedbackColor;
-            this.ctx.font = `bold ${Math.max(24, 32 * this.scaleY)}px Arial`;
-            this.ctx.textAlign = 'center';
-            
-            const alpha = Math.min(1, this.feedbackTimer / 20);
-            this.ctx.globalAlpha = alpha;
-            this.ctx.fillText(this.feedbackText, centerX, centerY + 120 * this.scaleY);
-            this.ctx.globalAlpha = 1;
-        }
-        
-        // Draw progress and stats
-        this.drawTestUI();
-    }
-
-    drawTestUI() {
-        // Time remaining
-        const timeRemaining = Math.max(0, this.duration - (performance.now() - this.startTime));
-        const minutes = Math.floor(timeRemaining / 60000);
-        const seconds = Math.floor((timeRemaining % 60000) / 1000);
-        
-        this.ctx.fillStyle = '#ffffff';
-        this.ctx.font = `${Math.max(16, 20 * this.scaleY)}px Arial`;
-        this.ctx.textAlign = 'left';
-        this.ctx.fillText(`Time: ${minutes}:${seconds.toString().padStart(2, '0')}`, 20, 30);
-        
-        // Trial count
-        this.ctx.fillText(`Trials: ${this.trialCount}`, 20, 55);
-        
-        // Response statistics
-        if (this.reactionTimes.length > 0) {
-            const avgRT = this.reactionTimes.reduce((a, b) => a + b) / this.reactionTimes.length;
-            this.ctx.fillText(`Avg RT: ${avgRT.toFixed(0)}ms`, 20, 80);
-        }
-        
-        // Accuracy info
-        this.ctx.fillText(`Responded: ${this.responseCount}`, 20, 105);
-        this.ctx.fillText(`Missed: ${this.missedStimuli}`, 20, 130);
-        this.ctx.fillText(`False starts: ${this.falseStarts}`, 20, 155);
-        
-        // Progress bar
-        const progress = Math.min(1, (performance.now() - this.startTime) / this.duration);
-        const barWidth = this.canvas.width - 40;
-        const barHeight = 8;
-        const barY = this.canvas.height - 30;
-        
-        this.ctx.fillStyle = '#333333';
-        this.ctx.fillRect(20, barY, barWidth, barHeight);
-        
-        this.ctx.fillStyle = '#00aa00';
-        this.ctx.fillRect(20, barY, barWidth * progress, barHeight);
-        
-        // Instructions
-        this.ctx.textAlign = 'center';
-        this.ctx.font = `${Math.max(14, 18 * this.scaleY)}px Arial`;
-        this.ctx.fillStyle = '#aaaaaa';
-        this.ctx.fillText('Press RED button when circle appears', this.canvas.width / 2, this.canvas.height - 50);
-    }
-
-    drawResults() {
-        const centerX = this.canvas.width / 2;
-        const centerY = this.canvas.height / 2;
-        
-        this.ctx.fillStyle = '#ffffff';
-        this.ctx.textAlign = 'center';
-        
-        // Title
-        this.ctx.font = `bold ${Math.max(32, 42 * this.scaleY)}px Arial`;
-        this.ctx.fillText('Test Complete!', centerX, centerY - 120 * this.scaleY);
-        
-        // Results
-        if (this.reactionTimes.length > 0) {
-            const avgRT = this.reactionTimes.reduce((a, b) => a + b) / this.reactionTimes.length;
-            const minRT = Math.min(...this.reactionTimes);
-            const maxRT = Math.max(...this.reactionTimes);
-            const consistency = this.calculateConsistency();
-            
-            this.ctx.font = `${Math.max(18, 24 * this.scaleY)}px Arial`;
-            this.ctx.fillStyle = '#00ff00';
-            this.ctx.fillText(`Average Reaction Time: ${avgRT.toFixed(1)}ms`, centerX, centerY - 60 * this.scaleY);
-            
-            this.ctx.fillStyle = '#ffffff';
-            this.ctx.fillText(`Fastest: ${minRT.toFixed(0)}ms`, centerX, centerY - 30 * this.scaleY);
-            this.ctx.fillText(`Slowest: ${maxRT.toFixed(0)}ms`, centerX, centerY);
-            this.ctx.fillText(`Consistency: ${consistency.toFixed(1)}%`, centerX, centerY + 30 * this.scaleY);
-            
-            // Performance rating
-            let rating = 'Good';
-            let ratingColor = '#ffff00';
-            
-            if (avgRT < 200) {
-                rating = 'Excellent';
-                ratingColor = '#00ff00';
-            } else if (avgRT < 300) {
-                rating = 'Very Good';
-                ratingColor = '#88ff00';
-            } else if (avgRT < 400) {
-                rating = 'Good';
-                ratingColor = '#ffff00';
-            } else {
-                rating = 'Needs Practice';
-                ratingColor = '#ff8800';
-            }
-            
-            this.ctx.fillStyle = ratingColor;
-            this.ctx.font = `bold ${Math.max(24, 32 * this.scaleY)}px Arial`;
-            this.ctx.fillText(`Rating: ${rating}`, centerX, centerY + 70 * this.scaleY);
-        } else {
-            this.ctx.fillStyle = '#ff8800';
-            this.ctx.font = `${Math.max(20, 28 * this.scaleY)}px Arial`;
-            this.ctx.fillText('No valid responses recorded', centerX, centerY);
-        }
-        
-        // Summary stats
-        this.ctx.fillStyle = '#aaaaaa';
-        this.ctx.font = `${Math.max(16, 20 * this.scaleY)}px Arial`;
-        this.ctx.fillText(`Total Stimuli: ${this.trialCount}`, centerX, centerY + 110 * this.scaleY);
-        this.ctx.fillText(`Responses: ${this.responseCount} | Missed: ${this.missedStimuli} | False Starts: ${this.falseStarts}`, centerX, centerY + 135 * this.scaleY);
-    }
-
-    calculateConsistency() {
-        if (this.reactionTimes.length < 2) return 100;
-        
-        const mean = this.reactionTimes.reduce((a, b) => a + b) / this.reactionTimes.length;
-        const variance = this.reactionTimes.reduce((sum, rt) => sum + Math.pow(rt - mean, 2), 0) / this.reactionTimes.length;
-        const standardDeviation = Math.sqrt(variance);
-        
-        // Convert to consistency percentage (lower SD = higher consistency)
-        const coefficientOfVariation = standardDeviation / mean;
-        return Math.max(0, 100 - (coefficientOfVariation * 100));
-    }
-
-    updateStats() {
-        // Update platform statistics display
-        if (this.reactionTimes.length > 0) {
-            const avgRT = this.reactionTimes.reduce((a, b) => a + b) / this.reactionTimes.length;
-            this.platform.updateTestStat('reactionTime', `${avgRT.toFixed(0)}ms`);
-        }
-        
-        const accuracy = this.trialCount > 0 ? (this.responseCount / this.trialCount) * 100 : 0;
-        this.platform.updateTestStat('accuracy', `${accuracy.toFixed(1)}%`);
-        
-        this.platform.updateTestStat('currentScore', this.responseCount.toString());
-        
-        const timeRemaining = Math.max(0, this.duration - (performance.now() - this.startTime));
-        const minutes = Math.floor(timeRemaining / 60000);
-        const seconds = Math.floor((timeRemaining % 60000) / 1000);
-        this.platform.updateTestStat('timeRemaining', `${minutes}:${seconds.toString().padStart(2, '0')}`);
-    }
-
-    endTest() {
-        this.running = false;
-        
-        // Calculate final results
-        const results = {
-            trialCount: this.trialCount,
-            responseCount: this.responseCount,
-            missedStimuli: this.missedStimuli,
-            falseStarts: this.falseStarts,
-            reactionTimes: [...this.reactionTimes],
-            averageRT: this.reactionTimes.length > 0 ? this.reactionTimes.reduce((a, b) => a + b) / this.reactionTimes.length : null,
-            consistency: this.calculateConsistency(),
-            accuracy: this.trialCount > 0 ? (this.responseCount / this.trialCount) * 100 : 0
-        };
-        
-        // Log test end
-        this.platform.dataLogger.endTest(results);
-        
-        // Notify platform
-        setTimeout(() => {
-            this.platform.onTestComplete(results);
-        }, 3000); // Show results for 3 seconds
-        
-        console.log('Simple Reaction Test completed:', results);
-    }
-
-    gameLoop() {
-        this.update();
-        this.draw();
-        
-        if (this.running || this.showingInstructions || this.feedbackTimer > 0) {
-            requestAnimationFrame(this.gameLoop);
-        }
-    }
-
-    getCurrentPhase() {
-        if (this.showingInstructions) return 'instructions';
-        if (this.running) return 'testing';
-        return 'completed';
     }
 
     destroy() {
-        this.running = false;
-        if (this.stimulusTimeout) {
-            clearTimeout(this.stimulusTimeout);
+        super.destroy();
+        if (this.stimulusInterval) {
+            clearTimeout(this.stimulusInterval);
         }
-        console.log('Simple Reaction Test destroyed');
     }
 }

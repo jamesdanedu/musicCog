@@ -1,4 +1,4 @@
-// main.js - Electron main process for Music Cognition Testing Platform
+// main.js - Electron main process for Music Cognition Testing Platform with Microbit Hardware Control
 const { app, BrowserWindow, ipcMain, dialog, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -13,10 +13,434 @@ const participantsFile = path.join(dataDir, 'participants.json');
 let mainWindow;
 let currentSession = null;
 
+// Microbit Hardware Controller
+let microbitController = null;
+let SerialPort = null;
+let ReadlineParser = null;
+
 // Ensure data directory exists
 if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
 }
+
+// ========================================
+// MICROBIT HARDWARE CONTROLLER CLASS
+// ========================================
+
+class MicrobitHardwareController {
+    constructor() {
+        this.microbits = [];
+        this.connected = false;
+        this.baudRate = 115200;
+        
+        // Button color mapping
+        this.buttonColors = ['green', 'white', 'red', 'green'];
+        this.buttonPositions = ['left', 'middle-left', 'middle-right', 'right'];
+    }
+
+    async initialize() {
+        try {
+            // Load SerialPort modules
+            SerialPort = require('serialport');
+            const { ReadlineParser: Parser } = require('@serialport/parser-readline');
+            ReadlineParser = Parser;
+            
+            console.log('🔌 Initializing Microbit hardware...');
+            
+            // Find and connect to all Microbits
+            await this.connectAllMicrobits();
+            
+            if (this.microbits.length > 0) {
+                this.connected = true;
+                console.log(`✅ Connected to ${this.microbits.length} Microbit(s)`);
+                
+                // Send initial configuration
+                for (const mb of this.microbits) {
+                    await this.sendToMicrobit(mb, 'INIT');
+                }
+                
+                return { success: true, count: this.microbits.length };
+            } else {
+                console.log('⚠️ No Microbits found');
+                return { success: false, message: 'No Microbits found' };
+            }
+            
+        } catch (error) {
+            console.error('❌ Microbit initialization error:', error);
+            return { success: false, error: error.message };
+        }
+    }
+
+    async connectAllMicrobits() {
+        const ports = await SerialPort.list();
+        
+        // Find all Microbit ports
+        const microbitPorts = ports.filter(port => 
+            (port.vendorId === '0D28' && port.productId === '0204') || 
+            port.manufacturer?.toLowerCase().includes('mbed') ||
+            port.product?.toLowerCase().includes('microbit')
+        );
+
+        console.log(`Found ${microbitPorts.length} Microbit port(s)`);
+
+        // Connect to each Microbit
+        for (let i = 0; i < microbitPorts.length; i++) {
+            const portInfo = microbitPorts[i];
+            try {
+                await this.connectMicrobit(portInfo, i);
+            } catch (error) {
+                console.error(`Failed to connect to Microbit on ${portInfo.path}:`, error);
+            }
+        }
+    }
+
+    async connectMicrobit(portInfo, index) {
+        return new Promise((resolve, reject) => {
+            const port = new SerialPort({
+                path: portInfo.path,
+                baudRate: this.baudRate,
+                autoOpen: false
+            });
+
+            const parser = port.pipe(new ReadlineParser({ 
+                delimiter: '\n',
+                encoding: 'utf8'
+            }));
+
+            port.open((error) => {
+                if (error) {
+                    reject(error);
+                    return;
+                }
+
+                const microbit = {
+                    id: index,
+                    port: port,
+                    parser: parser,
+                    path: portInfo.path,
+                    buttonStates: [false, false, false, false]
+                };
+
+                // Setup message handler
+                parser.on('data', (data) => {
+                    this.handleMicrobitMessage(microbit, data.trim());
+                });
+
+                port.on('error', (error) => {
+                    console.error(`Microbit ${index} error:`, error);
+                });
+
+                port.on('close', () => {
+                    console.log(`Microbit ${index} disconnected`);
+                    this.microbits = this.microbits.filter(mb => mb.id !== index);
+                    if (this.microbits.length === 0) {
+                        this.connected = false;
+                    }
+                });
+
+                this.microbits.push(microbit);
+                console.log(`✅ Connected Microbit ${index} on ${portInfo.path}`);
+                resolve(microbit);
+            });
+        });
+    }
+
+    handleMicrobitMessage(microbit, message) {
+        if (!message || message.length === 0) return;
+
+        console.log(`📨 Microbit ${microbit.id}: ${message}`);
+
+        const parts = message.split(':');
+        const command = parts[0];
+
+        switch (command) {
+            case 'BTN_PRESS':
+                this.handleButtonPress(microbit, parts);
+                break;
+            
+            case 'BTN_RELEASE':
+                this.handleButtonRelease(microbit, parts);
+                break;
+            
+            case 'STATUS':
+                console.log(`Microbit ${microbit.id} status:`, parts.slice(1).join(':'));
+                break;
+            
+            case 'ERROR':
+                console.error(`Microbit ${microbit.id} error:`, parts.slice(1).join(':'));
+                break;
+            
+            case 'READY':
+                console.log(`✅ Microbit ${microbit.id} ready`);
+                break;
+            
+            default:
+                console.log(`Unknown message from Microbit ${microbit.id}:`, message);
+        }
+    }
+
+    handleButtonPress(microbit, parts) {
+        // Format: BTN_PRESS:buttonIndex:timestamp
+        const buttonIndex = parseInt(parts[1]);
+        const timestamp = parseInt(parts[2]) || Date.now();
+
+        if (buttonIndex >= 0 && buttonIndex <= 3) {
+            microbit.buttonStates[buttonIndex] = true;
+
+            // Emit to renderer
+            if (mainWindow) {
+                mainWindow.webContents.send('microbit-button-press', {
+                    microbitId: microbit.id,
+                    button: buttonIndex + 1, // 1-indexed for UI
+                    color: this.buttonColors[buttonIndex],
+                    position: this.buttonPositions[buttonIndex],
+                    timestamp: timestamp
+                });
+            }
+
+            console.log(`🎮 Button ${buttonIndex + 1} (${this.buttonColors[buttonIndex]}) PRESSED`);
+        }
+    }
+
+    handleButtonRelease(microbit, parts) {
+        // Format: BTN_RELEASE:buttonIndex:timestamp:duration
+        const buttonIndex = parseInt(parts[1]);
+        const timestamp = parseInt(parts[2]) || Date.now();
+        const duration = parseInt(parts[3]) || 0;
+
+        if (buttonIndex >= 0 && buttonIndex <= 3) {
+            microbit.buttonStates[buttonIndex] = false;
+
+            // Emit to renderer
+            if (mainWindow) {
+                mainWindow.webContents.send('microbit-button-release', {
+                    microbitId: microbit.id,
+                    button: buttonIndex + 1, // 1-indexed for UI
+                    color: this.buttonColors[buttonIndex],
+                    position: this.buttonPositions[buttonIndex],
+                    timestamp: timestamp,
+                    duration: duration
+                });
+            }
+
+            console.log(`🎮 Button ${buttonIndex + 1} (${this.buttonColors[buttonIndex]}) RELEASED (${duration}ms)`);
+        }
+    }
+
+    async sendToMicrobit(microbit, message) {
+        return new Promise((resolve, reject) => {
+            if (!microbit.port.isOpen) {
+                reject(new Error('Port not open'));
+                return;
+            }
+
+            const messageWithNewline = message + '\n';
+            microbit.port.write(messageWithNewline, (error) => {
+                if (error) {
+                    console.error('Send error:', error);
+                    reject(error);
+                } else {
+                    resolve(true);
+                }
+            });
+        });
+    }
+
+    async sendToAll(message) {
+        const promises = this.microbits.map(mb => this.sendToMicrobit(mb, message));
+        await Promise.all(promises);
+    }
+
+    // LED Control Methods
+    async setLED(buttonNumber, state) {
+        try {
+            const buttonIndex = buttonNumber - 1; // Convert to 0-indexed
+            const command = state ? `LED_ON:${buttonIndex}` : `LED_OFF:${buttonIndex}`;
+            await this.sendToAll(command);
+            return true;
+        } catch (error) {
+            console.error('LED control error:', error);
+            return false;
+        }
+    }
+
+    async setAllLEDs(state) {
+        try {
+            const command = state ? 'ALL_LED_ON' : 'ALL_LED_OFF';
+            await this.sendToAll(command);
+            return true;
+        } catch (error) {
+            console.error('All LED control error:', error);
+            return false;
+        }
+    }
+
+    async flashLED(buttonNumber, times, duration) {
+        try {
+            const buttonIndex = buttonNumber - 1;
+            const command = `FLASH:${buttonIndex}:${times}:${duration}`;
+            await this.sendToAll(command);
+            return true;
+        } catch (error) {
+            console.error('Flash LED error:', error);
+            return false;
+        }
+    }
+
+    async flashAllLEDs(times, duration) {
+        try {
+            const command = `FLASH_ALL:${times}:${duration}`;
+            await this.sendToAll(command);
+            return true;
+        } catch (error) {
+            console.error('Flash all LEDs error:', error);
+            return false;
+        }
+    }
+
+    async chaseLEDs(rounds, speed) {
+        try {
+            const command = `CHASE:${rounds}:${speed}`;
+            await this.sendToAll(command);
+            return true;
+        } catch (error) {
+            console.error('Chase LEDs error:', error);
+            return false;
+        }
+    }
+
+    async randomLEDSequence(count, onDuration, offDuration, sequences) {
+        try {
+            const command = `RANDOM_SEQ:${count}:${onDuration}:${offDuration}:${sequences}`;
+            await this.sendToAll(command);
+            return true;
+        } catch (error) {
+            console.error('Random sequence error:', error);
+            return false;
+        }
+    }
+
+    async randomFlashSequence(sequences, flashDuration) {
+        try {
+            const command = `RANDOM_FLASH:${sequences}:${flashDuration}`;
+            await this.sendToAll(command);
+            return true;
+        } catch (error) {
+            console.error('Random flash error:', error);
+            return false;
+        }
+    }
+
+    async randomLEDGame(rounds, speed) {
+        try {
+            const command = `RANDOM_GAME:${rounds}:${speed}`;
+            await this.sendToAll(command);
+            return true;
+        } catch (error) {
+            console.error('Random game error:', error);
+            return false;
+        }
+    }
+
+    async simonSaysPattern(patternLength, playbackSpeed) {
+        try {
+            const command = `SIMON:${patternLength}:${playbackSpeed}`;
+            await this.sendToAll(command);
+            
+            // The Microbit will send back the pattern
+            return { success: true, pattern: [] }; // Pattern will be sent via message handler
+        } catch (error) {
+            console.error('Simon says error:', error);
+            return { success: false };
+        }
+    }
+
+    async randomCascade(waves, waveSpeed) {
+        try {
+            const command = `CASCADE:${waves}:${waveSpeed}`;
+            await this.sendToAll(command);
+            return true;
+        } catch (error) {
+            console.error('Cascade error:', error);
+            return false;
+        }
+    }
+
+    async rhythmicRandomPattern(beats, tempo) {
+        try {
+            const command = `RHYTHM:${beats}:${tempo}`;
+            await this.sendToAll(command);
+            return true;
+        } catch (error) {
+            console.error('Rhythm error:', error);
+            return false;
+        }
+    }
+
+    // Game Event Patterns
+    async gameStartPattern() {
+        try {
+            await this.sendToAll('GAME_START');
+            return true;
+        } catch (error) {
+            console.error('Game start pattern error:', error);
+            return false;
+        }
+    }
+
+    async gameOverPattern() {
+        try {
+            await this.sendToAll('GAME_OVER');
+            return true;
+        } catch (error) {
+            console.error('Game over pattern error:', error);
+            return false;
+        }
+    }
+
+    async gameWinPattern() {
+        try {
+            await this.sendToAll('GAME_WIN');
+            return true;
+        } catch (error) {
+            console.error('Game win pattern error:', error);
+            return false;
+        }
+    }
+
+    getStatus() {
+        return {
+            connected: this.connected,
+            connectionCount: this.microbits.length,
+            microbits: this.microbits.map(mb => ({
+                id: mb.id,
+                path: mb.path,
+                buttonStates: mb.buttonStates
+            }))
+        };
+    }
+
+    async disconnect() {
+        console.log('Disconnecting all Microbits...');
+        
+        for (const mb of this.microbits) {
+            try {
+                await this.sendToMicrobit(mb, 'DISCONNECT');
+                await new Promise(resolve => setTimeout(resolve, 100));
+                mb.port.close();
+            } catch (error) {
+                console.error(`Error disconnecting Microbit ${mb.id}:`, error);
+            }
+        }
+        
+        this.microbits = [];
+        this.connected = false;
+    }
+}
+
+// ========================================
+// ELECTRON APP LIFECYCLE
+// ========================================
 
 function createWindow() {
     mainWindow = new BrowserWindow({
@@ -26,7 +450,7 @@ function createWindow() {
             nodeIntegration: true,
             contextIsolation: false,
             enableRemoteModule: true,
-            webSecurity: false // Allow loading local audio files
+            webSecurity: false
         },
         icon: path.join(__dirname, 'assets/icon.png'),
         show: false,
@@ -37,18 +461,40 @@ function createWindow() {
     
     mainWindow.once('ready-to-show', () => {
         mainWindow.show();
-        
-        // Show welcome screen
         mainWindow.webContents.send('show-welcome');
     });
 
-    // Open DevTools in development
     if (process.argv.includes('--dev')) {
         mainWindow.webContents.openDevTools();
     }
 
-    // Create application menu
     createMenu();
+    
+    // Initialize Microbit controller
+    initializeMicrobitController();
+}
+
+async function initializeMicrobitController() {
+    microbitController = new MicrobitHardwareController();
+    const result = await microbitController.initialize();
+    
+    if (result.success) {
+        console.log('✅ Microbit controller initialized');
+        if (mainWindow) {
+            mainWindow.webContents.send('microbit-status', {
+                status: 'connected',
+                count: result.count
+            });
+        }
+    } else {
+        console.log('⚠️ Microbit controller initialization failed');
+        if (mainWindow) {
+            mainWindow.webContents.send('microbit-status', {
+                status: 'disconnected',
+                message: result.message || result.error
+            });
+        }
+    }
 }
 
 function createMenu() {
@@ -59,32 +505,24 @@ function createMenu() {
                 {
                     label: 'New Session',
                     accelerator: 'CmdOrCtrl+N',
-                    click: () => {
-                        mainWindow.webContents.send('new-session');
-                    }
+                    click: () => mainWindow.webContents.send('new-session')
                 },
                 {
                     label: 'Load Session',
                     accelerator: 'CmdOrCtrl+O',
-                    click: () => {
-                        loadSession();
-                    }
+                    click: () => loadSession()
                 },
                 { type: 'separator' },
                 {
                     label: 'Export Data',
                     accelerator: 'CmdOrCtrl+E',
-                    click: () => {
-                        exportSessionData();
-                    }
+                    click: () => exportSessionData()
                 },
                 { type: 'separator' },
                 {
                     label: 'Exit',
                     accelerator: process.platform === 'darwin' ? 'Cmd+Q' : 'Ctrl+Q',
-                    click: () => {
-                        app.quit();
-                    }
+                    click: () => app.quit()
                 }
             ]
         },
@@ -93,21 +531,50 @@ function createMenu() {
             submenu: [
                 {
                     label: 'Participant Info',
-                    click: () => {
-                        mainWindow.webContents.send('show-participant-form');
-                    }
+                    click: () => mainWindow.webContents.send('show-participant-form')
                 },
                 {
                     label: 'System Calibration',
-                    click: () => {
-                        mainWindow.webContents.send('start-calibration');
-                    }
+                    click: () => mainWindow.webContents.send('start-calibration')
                 },
                 {
                     label: 'Start Test Battery',
                     accelerator: 'F1',
+                    click: () => mainWindow.webContents.send('start-test-battery')
+                }
+            ]
+        },
+        {
+            label: 'Hardware',
+            submenu: [
+                {
+                    label: 'Reconnect Microbit',
+                    click: async () => {
+                        if (microbitController) {
+                            await microbitController.disconnect();
+                        }
+                        await initializeMicrobitController();
+                    }
+                },
+                {
+                    label: 'Test All LEDs',
+                    click: async () => {
+                        if (microbitController && microbitController.connected) {
+                            await microbitController.flashAllLEDs(3, 300);
+                        }
+                    }
+                },
+                {
+                    label: 'Microbit Status',
                     click: () => {
-                        mainWindow.webContents.send('start-test-battery');
+                        if (microbitController) {
+                            const status = microbitController.getStatus();
+                            dialog.showMessageBox(mainWindow, {
+                                type: 'info',
+                                title: 'Microbit Status',
+                                message: `Connected: ${status.connected}\nDevices: ${status.connectionCount}`
+                            });
+                        }
                     }
                 }
             ]
@@ -117,21 +584,11 @@ function createMenu() {
             submenu: [
                 {
                     label: 'View Session Summary',
-                    click: () => {
-                        mainWindow.webContents.send('show-session-summary');
-                    }
+                    click: () => mainWindow.webContents.send('show-session-summary')
                 },
                 {
                     label: 'Export Raw Data',
-                    click: () => {
-                        exportRawData();
-                    }
-                },
-                {
-                    label: 'Data Analysis',
-                    click: () => {
-                        mainWindow.webContents.send('show-analysis');
-                    }
+                    click: () => exportRawData()
                 }
             ]
         },
@@ -139,44 +596,186 @@ function createMenu() {
             label: 'Help',
             submenu: [
                 {
-                    label: 'About',
+                    label: 'Documentation',
                     click: () => {
-                        showAbout();
+                        require('electron').shell.openExternal('https://github.com/yourusername/music-cognition-platform');
                     }
                 },
                 {
-                    label: 'User Manual',
+                    label: 'About',
                     click: () => {
-                        mainWindow.webContents.send('show-manual');
+                        dialog.showMessageBox(mainWindow, {
+                            type: 'info',
+                            title: 'About',
+                            message: 'Music Cognition Testing Platform v1.0.0'
+                        });
                     }
                 }
             ]
         }
     ];
 
-    // macOS menu adjustments
-    if (process.platform === 'darwin') {
-        template.unshift({
-            label: app.getName(),
-            submenu: [
-                { role: 'about' },
-                { type: 'separator' },
-                { role: 'services' },
-                { type: 'separator' },
-                { role: 'hide' },
-                { role: 'hideothers' },
-                { role: 'unhide' },
-                { type: 'separator' },
-                { role: 'quit' }
-            ]
-        });
-    }
-
     const menu = Menu.buildFromTemplate(template);
     Menu.setApplicationMenu(menu);
 }
 
-// Session Management
+app.whenReady().then(createWindow);
+
+app.on('window-all-closed', () => {
+    if (microbitController) {
+        microbitController.disconnect();
+    }
+    if (process.platform !== 'darwin') {
+        app.quit();
+    }
+});
+
+app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+        createWindow();
+    }
+});
+
+app.on('before-quit', async () => {
+    if (microbitController) {
+        await microbitController.disconnect();
+    }
+});
+
+// ========================================
+// IPC HANDLERS - MICROBIT HARDWARE
+// ========================================
+
+ipcMain.handle('setup-microbit', async () => {
+    if (microbitController) {
+        return microbitController.getStatus();
+    }
+    return { connected: false, message: 'Controller not initialized' };
+});
+
+ipcMain.handle('get-microbit-status', async () => {
+    if (microbitController) {
+        return microbitController.getStatus();
+    }
+    return { connected: false, connectionCount: 0 };
+});
+
+ipcMain.handle('set-led', async (event, buttonNumber, state) => {
+    if (microbitController && microbitController.connected) {
+        const success = await microbitController.setLED(buttonNumber, state);
+        return { success };
+    }
+    return { success: false, error: 'Microbit not connected' };
+});
+
+ipcMain.handle('set-all-leds', async (event, state) => {
+    if (microbitController && microbitController.connected) {
+        const success = await microbitController.setAllLEDs(state);
+        return { success };
+    }
+    return { success: false, error: 'Microbit not connected' };
+});
+
+ipcMain.handle('flash-led', async (event, buttonNumber, times, duration) => {
+    if (microbitController && microbitController.connected) {
+        const success = await microbitController.flashLED(buttonNumber, times, duration);
+        return { success };
+    }
+    return { success: false, error: 'Microbit not connected' };
+});
+
+ipcMain.handle('flash-all-leds', async (event, times, duration) => {
+    if (microbitController && microbitController.connected) {
+        const success = await microbitController.flashAllLEDs(times, duration);
+        return { success };
+    }
+    return { success: false, error: 'Microbit not connected' };
+});
+
+ipcMain.handle('chase-leds', async (event, rounds, speed) => {
+    if (microbitController && microbitController.connected) {
+        const success = await microbitController.chaseLEDs(rounds, speed);
+        return { success };
+    }
+    return { success: false, error: 'Microbit not connected' };
+});
+
+ipcMain.handle('random-led-sequence', async (event, count, onDuration, offDuration, sequences) => {
+    if (microbitController && microbitController.connected) {
+        const success = await microbitController.randomLEDSequence(count, onDuration, offDuration, sequences);
+        return { success };
+    }
+    return { success: false, error: 'Microbit not connected' };
+});
+
+ipcMain.handle('random-flash-sequence', async (event, sequences, flashDuration) => {
+    if (microbitController && microbitController.connected) {
+        const success = await microbitController.randomFlashSequence(sequences, flashDuration);
+        return { success };
+    }
+    return { success: false, error: 'Microbit not connected' };
+});
+
+ipcMain.handle('random-led-game', async (event, rounds, speed) => {
+    if (microbitController && microbitController.connected) {
+        const success = await microbitController.randomLEDGame(rounds, speed);
+        return { success };
+    }
+    return { success: false, error: 'Microbit not connected' };
+});
+
+ipcMain.handle('simon-says-pattern', async (event, patternLength, playbackSpeed) => {
+    if (microbitController && microbitController.connected) {
+        const result = await microbitController.simonSaysPattern(patternLength, playbackSpeed);
+        return result;
+    }
+    return { success: false, error: 'Microbit not connected' };
+});
+
+ipcMain.handle('random-cascade', async (event, waves, waveSpeed) => {
+    if (microbitController && microbitController.connected) {
+        const success = await microbitController.randomCascade(waves, waveSpeed);
+        return { success };
+    }
+    return { success: false, error: 'Microbit not connected' };
+});
+
+ipcMain.handle('rhythmic-random-pattern', async (event, beats, tempo) => {
+    if (microbitController && microbitController.connected) {
+        const success = await microbitController.rhythmicRandomPattern(beats, tempo);
+        return { success };
+    }
+    return { success: false, error: 'Microbit not connected' };
+});
+
+ipcMain.handle('game-start-pattern', async () => {
+    if (microbitController && microbitController.connected) {
+        const success = await microbitController.gameStartPattern();
+        return { success };
+    }
+    return { success: false, error: 'Microbit not connected' };
+});
+
+ipcMain.handle('game-over-pattern', async () => {
+    if (microbitController && microbitController.connected) {
+        const success = await microbitController.gameOverPattern();
+        return { success };
+    }
+    return { success: false, error: 'Microbit not connected' };
+});
+
+ipcMain.handle('game-win-pattern', async () => {
+    if (microbitController && microbitController.connected) {
+        const success = await microbitController.gameWinPattern();
+        return { success };
+    }
+    return { success: false, error: 'Microbit not connected' };
+});
+
+// ========================================
+// IPC HANDLERS - SESSION MANAGEMENT
+// ========================================
+
 ipcMain.handle('create-session', async (event, participantData) => {
     try {
         currentSession = {
@@ -191,7 +790,7 @@ ipcMain.handle('create-session', async (event, participantData) => {
                 platform: process.platform,
                 electronVersion: process.versions.electron,
                 nodeVersion: process.versions.node,
-                audioDevices: await getAudioDevices()
+                microbitConnected: microbitController ? microbitController.connected : false
             }
         };
         
@@ -220,7 +819,6 @@ ipcMain.handle('update-session', async (event, sessionData) => {
     }
 });
 
-// Test Data Management
 ipcMain.handle('save-test-data', async (event, testData) => {
     try {
         if (!currentSession) {
@@ -243,8 +841,6 @@ ipcMain.handle('save-test-data', async (event, testData) => {
         
         currentSession.tests.push(testResult);
         await saveSession(currentSession);
-        
-        // Also save individual test file
         await saveTestFile(testResult);
         
         return { success: true, testId: testResult.id };
@@ -254,49 +850,10 @@ ipcMain.handle('save-test-data', async (event, testData) => {
     }
 });
 
-// Audio Device Management
-async function getAudioDevices() {
-    // This would be expanded to get actual audio device info
-    return {
-        inputDevices: [],
-        outputDevices: [],
-        sampleRate: 48000,
-        bufferSize: 512
-    };
-}
+// ========================================
+// DATA EXPORT FUNCTIONS
+// ========================================
 
-// Microbit Hardware Management
-ipcMain.handle('setup-microbit', async () => {
-    try {
-        // Initialize Microbit connection
-        const { SerialPort } = require('serialport');
-        
-        const ports = await SerialPort.list();
-        const microbitPort = ports.find(port => 
-            port.vendorId === '0D28' && port.productId === '0204'
-        );
-        
-        if (microbitPort) {
-            return { 
-                success: true, 
-                message: 'Microbit connected',
-                port: microbitPort.path 
-            };
-        } else {
-            return { 
-                success: false, 
-                message: 'Microbit not found. Please check connection.' 
-            };
-        }
-    } catch (error) {
-        return { 
-            success: false, 
-            message: `Microbit connection error: ${error.message}` 
-        };
-    }
-});
-
-// Data Export Functions
 async function exportSessionData() {
     try {
         if (!currentSession) {
@@ -332,18 +889,18 @@ async function exportRawData() {
             dialog.showErrorBox('No Data', 'No test data to export.');
             return;
         }
-        
+
         const { filePath } = await dialog.showSaveDialog(mainWindow, {
-            title: 'Export Raw Data',
+            title: 'Export Raw Data as CSV',
             defaultPath: `raw_data_${currentSession.id}_${new Date().toISOString().split('T')[0]}.csv`,
             filters: [
                 { name: 'CSV Files', extensions: ['csv'] },
                 { name: 'All Files', extensions: ['*'] }
             ]
         });
-        
+
         if (filePath) {
-            await exportToCsv(currentSession, filePath);
+            await exportToCSV(filePath);
             dialog.showMessageBox(mainWindow, {
                 type: 'info',
                 title: 'Export Complete',
@@ -355,41 +912,39 @@ async function exportRawData() {
     }
 }
 
-async function exportToCsv(session, filePath) {
+async function exportToCSV(filePath) {
     const csvData = [];
     
-    session.tests.forEach(test => {
-        if (test.rawData && test.rawData.length > 0) {
-            test.rawData.forEach(dataPoint => {
-                csvData.push({
-                    sessionId: session.id,
-                    participantId: session.participantId,
-                    testName: test.testName,
-                    testId: test.id,
-                    musicCondition: test.musicCondition,
-                    buttonConfig: test.buttonConfig,
-                    eventType: dataPoint.type,
-                    timestamp: dataPoint.timestamp,
-                    button: dataPoint.button || '',
-                    reactionTime: dataPoint.reactionTime || '',
-                    accuracy: dataPoint.accuracy || '',
-                    correct: dataPoint.correct || '',
-                    musicTime: dataPoint.musicTime || '',
-                    testPhase: dataPoint.testPhase || '',
-                    value: dataPoint.value || '',
-                    additional: JSON.stringify(dataPoint.additional || {})
-                });
+    for (const test of currentSession.tests) {
+        for (const dataPoint of test.rawData) {
+            csvData.push({
+                sessionId: currentSession.id,
+                participantId: currentSession.participantId,
+                testId: test.id,
+                testName: test.testName,
+                musicCondition: test.musicCondition,
+                buttonConfig: test.buttonConfig,
+                eventType: dataPoint.type || 'response',
+                timestamp: dataPoint.timestamp,
+                button: dataPoint.button,
+                reactionTime: dataPoint.reactionTime || '',
+                accuracy: dataPoint.accuracy || '',
+                correct: dataPoint.correct || '',
+                musicTime: dataPoint.musicTime || '',
+                testPhase: dataPoint.testPhase || '',
+                value: dataPoint.value || '',
+                additional: JSON.stringify(dataPoint)
             });
         }
-    });
-    
+    }
+
     const csvWriter = createCsvWriter({
         path: filePath,
         header: [
             { id: 'sessionId', title: 'Session_ID' },
             { id: 'participantId', title: 'Participant_ID' },
-            { id: 'testName', title: 'Test_Name' },
             { id: 'testId', title: 'Test_ID' },
+            { id: 'testName', title: 'Test_Name' },
             { id: 'musicCondition', title: 'Music_Condition' },
             { id: 'buttonConfig', title: 'Button_Config' },
             { id: 'eventType', title: 'Event_Type' },
@@ -408,12 +963,14 @@ async function exportToCsv(session, filePath) {
     await csvWriter.writeRecords(csvData);
 }
 
-// File Management
+// ========================================
+// FILE MANAGEMENT
+// ========================================
+
 async function saveSession(session) {
     const sessionFile = path.join(dataDir, `session_${session.id}.json`);
     fs.writeFileSync(sessionFile, JSON.stringify(session, null, 2));
     
-    // Update sessions index
     let sessions = [];
     if (fs.existsSync(sessionsFile)) {
         sessions = JSON.parse(fs.readFileSync(sessionsFile, 'utf8'));
@@ -439,86 +996,36 @@ async function saveSession(session) {
 }
 
 async function saveTestFile(testResult) {
-    const testFile = path.join(dataDir, 'tests', `test_${testResult.id}.json`);
-    const testDir = path.dirname(testFile);
-    
-    if (!fs.existsSync(testDir)) {
-        fs.mkdirSync(testDir, { recursive: true });
-    }
-    
+    const testFile = path.join(dataDir, `test_${testResult.id}.json`);
     fs.writeFileSync(testFile, JSON.stringify(testResult, null, 2));
 }
 
 async function loadSession() {
-    try {
-        const { filePaths } = await dialog.showOpenDialog(mainWindow, {
-            title: 'Load Session',
-            filters: [
-                { name: 'JSON Files', extensions: ['json'] },
-                { name: 'All Files', extensions: ['*'] }
-            ]
-        });
-        
-        if (filePaths && filePaths.length > 0) {
+    const { filePaths } = await dialog.showOpenDialog(mainWindow, {
+        title: 'Load Session',
+        defaultPath: dataDir,
+        filters: [
+            { name: 'JSON Files', extensions: ['json'] },
+            { name: 'All Files', extensions: ['*'] }
+        ],
+        properties: ['openFile']
+    });
+
+    if (filePaths && filePaths.length > 0) {
+        try {
             const sessionData = JSON.parse(fs.readFileSync(filePaths[0], 'utf8'));
             currentSession = sessionData;
-            
-            mainWindow.webContents.send('session-loaded', currentSession);
+            mainWindow.webContents.send('session-loaded', sessionData);
             
             dialog.showMessageBox(mainWindow, {
                 type: 'info',
                 title: 'Session Loaded',
-                message: `Session loaded: ${currentSession.id}`
+                message: `Session loaded successfully!\nParticipant: ${sessionData.participantId}`
             });
+        } catch (error) {
+            dialog.showErrorBox('Load Error', `Failed to load session: ${error.message}`);
         }
-    } catch (error) {
-        dialog.showErrorBox('Load Error', error.message);
     }
 }
 
-function showAbout() {
-    dialog.showMessageBox(mainWindow, {
-        type: 'info',
-        title: 'About Music Cognition Testing Platform',
-        message: 'Music Cognition Testing Platform',
-        detail: `Version 1.0.0
-
-A scientific platform for testing concentration and reaction times under different musical conditions.
-
-Research Project by:
-Corey Ashcroft, Millie Kehoe, and Harry Quinlan
-St Mary's Secondary School, Edenderry, Co. Offaly
-
-Developed for psychological and cognitive research applications.`
-    });
-}
-// App Events
-app.whenReady().then(createWindow);
-
-app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') {
-        app.quit();
-    }
-});
-
-app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-        createWindow();
-    }
-});
-
-app.on('before-quit', () => {
-    // Save any pending data
-    if (currentSession) {
-        saveSession(currentSession);
-    }
-});
-
-// Prevent navigation away from the app
-app.on('web-contents-created', (event, contents) => {
-    contents.on('will-navigate', (event, url) => {
-        if (url !== contents.getURL()) {
-            event.preventDefault();
-        }
-    });
-});
+console.log('🚀 Music Cognition Testing Platform - Main Process Started');

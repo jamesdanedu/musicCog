@@ -1,4 +1,4 @@
-// main.js - Electron main process for Music Cognition Testing Platform with Microbit Hardware Control
+// main.js - Electron main process for Music Cognition Testing Platform with NodeMCU Hardware Control
 const { app, BrowserWindow, ipcMain, dialog, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -13,7 +13,7 @@ const participantsFile = path.join(dataDir, 'participants.json');
 let mainWindow;
 let currentSession = null;
 
-// Microbit Hardware Controller
+// NodeMCU Hardware Controller
 let microbitController = null;
 
 // Ensure data directory exists
@@ -22,198 +22,254 @@ if (!fs.existsSync(dataDir)) {
 }
 
 // ========================================
-// MICROBIT HARDWARE CONTROLLER CLASS
+// NODEMCU HARDWARE CONTROLLER CLASS
+// Updated to work with single NodeMCU ESP8266 instead of 4 Microbits
 // ========================================
 
 class MicrobitHardwareController {
     constructor() {
-        this.microbits = [];
+        this.nodemcu = null; // Single NodeMCU device
         this.connected = false;
         this.baudRate = 115200;
         
-        // Button color mapping
+        // Button color mapping (same as before)
         this.buttonColors = ['green', 'white', 'red', 'green'];
         this.buttonPositions = ['left', 'middle-left', 'middle-right', 'right'];
+        
+        // Button state tracking for all 4 buttons
+        this.buttonStates = [false, false, false, false];
     }
 
     async initialize() {
         try {
-            console.log('🔌 Initializing Microbit hardware...');
+            console.log('🔌 Initializing NodeMCU hardware...');
             
-            // Find and connect to all Microbits
-            await this.connectAllMicrobits();
+            // Find and connect to NodeMCU
+            await this.connectNodeMCU();
             
-            if (this.microbits.length > 0) {
+            if (this.nodemcu) {
                 this.connected = true;
-                console.log(`✅ Connected to ${this.microbits.length} Microbit(s)`);
+                console.log('✅ Connected to NodeMCU');
                 
                 // Send initial configuration
-                for (const mb of this.microbits) {
-                    await this.sendToMicrobit(mb, 'INIT');
-                }
+                await this.sendToNodeMCU('INIT');
                 
-                return { success: true, count: this.microbits.length };
+                return { success: true, count: 1 };
             } else {
-                console.log('⚠️ No Microbits found');
-                return { success: false, message: 'No Microbits found' };
+                console.log('⚠️ NodeMCU not found');
+                return { success: false, message: 'NodeMCU not found' };
             }
             
         } catch (error) {
-            console.error('❌ Microbit initialization error:', error);
+            console.error('❌ NodeMCU initialization error:', error);
             return { success: false, error: error.message };
         }
     }
 
-    async connectAllMicrobits() {
-        // Use the static list method from SerialPort class (v12.x API)
+    async connectNodeMCU() {
         const { SerialPort } = require('serialport');
-        const ports = await SerialPort.list();
+        const { ReadlineParser } = require('@serialport/parser-readline');
         
-        // Find all Microbit ports
-        const microbitPorts = ports.filter(port => 
-            (port.vendorId === '0D28' && port.productId === '0204') || 
-            port.manufacturer?.toLowerCase().includes('mbed') ||
-            port.product?.toLowerCase().includes('microbit')
-        );
-
-        console.log(`Found ${microbitPorts.length} Microbit port(s)`);
-
-        // Connect to each Microbit
-        for (let i = 0; i < microbitPorts.length; i++) {
-            const portInfo = microbitPorts[i];
-            try {
-                await this.connectMicrobit(portInfo, i);
-            } catch (error) {
-                console.error(`Failed to connect to Microbit on ${portInfo.path}:`, error);
-            }
-        }
-    }
-
-    async connectMicrobit(portInfo, index) {
-        return new Promise((resolve, reject) => {
-            // Import SerialPort for each connection
-            const { SerialPort } = require('serialport');
-            const { ReadlineParser } = require('@serialport/parser-readline');
+        try {
+            // List all available ports
+            const ports = await SerialPort.list();
+            console.log('Available serial ports:', ports);
             
+            // Find NodeMCU/ESP8266 port
+            // ESP8266 typically shows up with these identifiers
+            const nodemcuPort = ports.find(port => 
+                // Common NodeMCU identifiers
+                port.manufacturer?.toLowerCase().includes('silicon labs') ||
+                port.manufacturer?.toLowerCase().includes('ch340') ||
+                port.manufacturer?.toLowerCase().includes('cp210') ||
+                port.productId === '7523' || // CH340 USB-Serial
+                port.productId === 'ea60' || // CP2102 USB-Serial
+                // Generic USB-Serial identifiers
+                port.path.includes('usbserial') ||
+                port.path.includes('USB')
+            );
+            
+            if (!nodemcuPort) {
+                throw new Error('NodeMCU not found. Please check USB connection and drivers.');
+            }
+            
+            console.log(`Found NodeMCU on port: ${nodemcuPort.path}`);
+            
+            // Create serial connection
             const port = new SerialPort({
-                path: portInfo.path,
+                path: nodemcuPort.path,
                 baudRate: this.baudRate,
                 autoOpen: false
             });
-
+            
+            // Setup parser for line-based communication
             const parser = port.pipe(new ReadlineParser({ 
                 delimiter: '\n',
                 encoding: 'utf8'
             }));
-
-            port.open((error) => {
-                if (error) {
-                    reject(error);
-                    return;
+            
+            // Setup message handler
+            parser.on('data', (data) => {
+                this.handleMessage(data.trim());
+            });
+            
+            // Setup error handlers
+            port.on('close', () => {
+                console.log('NodeMCU connection closed');
+                this.connected = false;
+                this.nodemcu = null;
+                
+                if (mainWindow) {
+                    mainWindow.webContents.send('microbit-status', {
+                        status: 'disconnected'
+                    });
                 }
-
-                const microbit = {
-                    id: index,
-                    port: port,
-                    parser: parser,
-                    path: portInfo.path,
-                    buttonStates: [false, false, false, false]
-                };
-
-                // Setup message handler
-                parser.on('data', (data) => {
-                    this.handleMicrobitMessage(microbit, data.trim());
-                });
-
-                port.on('error', (error) => {
-                    console.error(`Microbit ${index} error:`, error);
-                });
-
-                port.on('close', () => {
-                    console.log(`Microbit ${index} disconnected`);
-                    this.microbits = this.microbits.filter(mb => mb.id !== index);
-                    if (this.microbits.length === 0) {
-                        this.connected = false;
+            });
+            
+            port.on('error', (error) => {
+                console.error('NodeMCU port error:', error);
+            });
+            
+            // Open the connection
+            await new Promise((resolve, reject) => {
+                port.open((error) => {
+                    if (error) {
+                        reject(error);
+                    } else {
+                        resolve();
                     }
                 });
-
-                this.microbits.push(microbit);
-                console.log(`✅ Connected Microbit ${index} on ${portInfo.path}`);
-                resolve(microbit);
             });
-        });
-    }
-
-    handleMicrobitMessage(microbit, message) {
-        if (!message || message.length === 0) return;
-
-        console.log(`📨 Microbit ${microbit.id}: ${message}`);
-
-        const parts = message.split(':');
-        const command = parts[0];
-
-        switch (command) {
-            case 'BTN_PRESS':
-                this.handleButtonPress(microbit, parts);
-                break;
             
-            case 'BTN_RELEASE':
-                this.handleButtonRelease(microbit, parts);
-                break;
+            // Store the connection
+            this.nodemcu = {
+                port: port,
+                parser: parser,
+                id: 'nodemcu-main',
+                path: nodemcuPort.path,
+                buttonStates: [false, false, false, false]
+            };
             
-            case 'STATUS':
-                console.log(`Microbit ${microbit.id} status:`, parts.slice(1).join(':'));
-                break;
+            console.log('NodeMCU connected successfully');
             
-            case 'ERROR':
-                console.error(`Microbit ${microbit.id} error:`, parts.slice(1).join(':'));
-                break;
+            // Wait a moment for ESP to be ready
+            await this.delay(1000);
             
-            case 'READY':
-                console.log(`✅ Microbit ${microbit.id} ready`);
-                break;
+            // Notify renderer process
+            if (mainWindow) {
+                mainWindow.webContents.send('microbit-status', {
+                    status: 'connected',
+                    device: 'NodeMCU ESP8266'
+                });
+            }
             
-            default:
-                console.log(`Unknown message from Microbit ${microbit.id}:`, message);
+            // Run LED test sequence to verify hardware
+            console.log('='.repeat(50));
+            console.log('🎨 Starting LED Test Sequence...');
+            console.log('='.repeat(50));
+            await this.delay(500);
+            await this.testSequence();
+            console.log('='.repeat(50));
+            console.log('✅ LED Test Complete - System Ready!');
+            console.log('='.repeat(50));
+            
+        } catch (error) {
+            console.error('NodeMCU connection error:', error);
+            throw error;
         }
     }
 
-    handleButtonPress(microbit, parts) {
+    handleMessage(message) {
+        if (!message || message.length === 0) return;
+        
+        console.log('NodeMCU message:', message);
+        
+        const parts = message.split(':');
+        const command = parts[0];
+        
+        switch (command) {
+            case 'BTN_PRESS':
+                this.handleButtonPress(parts);
+                break;
+                
+            case 'BTN_RELEASE':
+                this.handleButtonRelease(parts);
+                break;
+                
+            case 'READY':
+                console.log('NodeMCU is ready');
+                break;
+                
+            case 'INITIALIZED':
+                console.log('NodeMCU initialized successfully');
+                break;
+                
+            case 'STATUS':
+                this.handleStatusUpdate(parts);
+                break;
+                
+            case 'ERROR':
+                console.error('NodeMCU error:', parts.slice(1).join(':'));
+                break;
+                
+            case 'PONG':
+                console.log('NodeMCU responded to ping');
+                break;
+                
+            default:
+                console.log('Unknown NodeMCU message:', message);
+        }
+    }
+
+    handleButtonPress(parts) {
         // Format: BTN_PRESS:buttonIndex:timestamp
         const buttonIndex = parseInt(parts[1]);
         const timestamp = parseInt(parts[2]) || Date.now();
 
         if (buttonIndex >= 0 && buttonIndex <= 3) {
-            microbit.buttonStates[buttonIndex] = true;
+            this.nodemcu.buttonStates[buttonIndex] = true;
+            this.buttonStates[buttonIndex] = true;
+
+            // Enhanced console logging
+            console.log('');
+            console.log('━'.repeat(60));
+            console.log(`🎮 BUTTON PRESSED!`);
+            console.log(`   Button: ${buttonIndex + 1} (${this.buttonColors[buttonIndex].toUpperCase()})`);
+            console.log(`   Position: ${this.buttonPositions[buttonIndex]}`);
+            console.log(`   Timestamp: ${timestamp}ms`);
+            console.log('━'.repeat(60));
 
             // Emit to renderer
             if (mainWindow) {
                 mainWindow.webContents.send('microbit-button-press', {
-                    microbitId: microbit.id,
+                    microbitId: this.nodemcu.id,
                     button: buttonIndex + 1, // 1-indexed for UI
                     color: this.buttonColors[buttonIndex],
                     position: this.buttonPositions[buttonIndex],
                     timestamp: timestamp
                 });
             }
-
-            console.log(`🎮 Button ${buttonIndex + 1} (${this.buttonColors[buttonIndex]}) PRESSED`);
         }
     }
 
-    handleButtonRelease(microbit, parts) {
+    handleButtonRelease(parts) {
         // Format: BTN_RELEASE:buttonIndex:timestamp:duration
         const buttonIndex = parseInt(parts[1]);
         const timestamp = parseInt(parts[2]) || Date.now();
         const duration = parseInt(parts[3]) || 0;
 
         if (buttonIndex >= 0 && buttonIndex <= 3) {
-            microbit.buttonStates[buttonIndex] = false;
+            this.nodemcu.buttonStates[buttonIndex] = false;
+            this.buttonStates[buttonIndex] = false;
+
+            // Enhanced console logging
+            console.log(`   ↳ Button ${buttonIndex + 1} RELEASED after ${duration}ms`);
+            console.log('');
 
             // Emit to renderer
             if (mainWindow) {
                 mainWindow.webContents.send('microbit-button-release', {
-                    microbitId: microbit.id,
+                    microbitId: this.nodemcu.id,
                     button: buttonIndex + 1, // 1-indexed for UI
                     color: this.buttonColors[buttonIndex],
                     position: this.buttonPositions[buttonIndex],
@@ -221,20 +277,23 @@ class MicrobitHardwareController {
                     duration: duration
                 });
             }
-
-            console.log(`🎮 Button ${buttonIndex + 1} (${this.buttonColors[buttonIndex]}) RELEASED (${duration}ms)`);
         }
     }
 
-    async sendToMicrobit(microbit, message) {
+    handleStatusUpdate(parts) {
+        // Format: STATUS:buttonStates:ledStates:uptime
+        console.log('NodeMCU Status:', parts.slice(1).join(' | '));
+    }
+
+    async sendToNodeMCU(message) {
         return new Promise((resolve, reject) => {
-            if (!microbit.port.isOpen) {
+            if (!this.nodemcu || !this.nodemcu.port.isOpen) {
                 reject(new Error('Port not open'));
                 return;
             }
 
             const messageWithNewline = message + '\n';
-            microbit.port.write(messageWithNewline, (error) => {
+            this.nodemcu.port.write(messageWithNewline, (error) => {
                 if (error) {
                     console.error('Send error:', error);
                     reject(error);
@@ -245,17 +304,12 @@ class MicrobitHardwareController {
         });
     }
 
-    async sendToAll(message) {
-        const promises = this.microbits.map(mb => this.sendToMicrobit(mb, message));
-        await Promise.all(promises);
-    }
-
-    // LED Control Methods
+    // LED Control Methods (same interface as before)
     async setLED(buttonNumber, state) {
         try {
             const buttonIndex = buttonNumber - 1; // Convert to 0-indexed
             const command = state ? `LED_ON:${buttonIndex}` : `LED_OFF:${buttonIndex}`;
-            await this.sendToAll(command);
+            await this.sendToNodeMCU(command);
             return true;
         } catch (error) {
             console.error('LED control error:', error);
@@ -265,45 +319,42 @@ class MicrobitHardwareController {
 
     async setAllLEDs(state) {
         try {
-            const command = state ? 'ALL_LED_ON' : 'ALL_LED_OFF';
-            await this.sendToAll(command);
+            const command = state ? 'ALL_ON' : 'ALL_OFF';
+            await this.sendToNodeMCU(command);
             return true;
         } catch (error) {
-            console.error('All LED control error:', error);
+            console.error('LED control error:', error);
             return false;
         }
     }
 
-    async flashLED(buttonNumber, times, duration) {
+    async flashLED(buttonNumber, times = 2, duration = 100) {
         try {
             const buttonIndex = buttonNumber - 1;
-            const command = `FLASH:${buttonIndex}:${times}:${duration}`;
-            await this.sendToAll(command);
+            await this.sendToNodeMCU(`FLASH:${buttonIndex}:${times}:${duration}`);
             return true;
         } catch (error) {
-            console.error('Flash LED error:', error);
+            console.error('LED flash error:', error);
             return false;
         }
     }
 
-    async flashAllLEDs(times, duration) {
+    async flashAllLEDs(times = 2, duration = 100) {
         try {
-            const command = `FLASH_ALL:${times}:${duration}`;
-            await this.sendToAll(command);
+            await this.sendToNodeMCU(`FLASH_ALL:${times}:${duration}`);
             return true;
         } catch (error) {
-            console.error('Flash all LEDs error:', error);
+            console.error('LED flash error:', error);
             return false;
         }
     }
 
-    async chaseLEDs(rounds, speed) {
+    async chaseLEDs(rounds = 3, speed = 100) {
         try {
-            const command = `CHASE:${rounds}:${speed}`;
-            await this.sendToAll(command);
+            await this.sendToNodeMCU(`CHASE:${rounds}:${speed}`);
             return true;
         } catch (error) {
-            console.error('Chase LEDs error:', error);
+            console.error('LED chase error:', error);
             return false;
         }
     }
@@ -311,7 +362,7 @@ class MicrobitHardwareController {
     async randomLEDSequence(count, onDuration, offDuration, sequences) {
         try {
             const command = `RANDOM_SEQ:${count}:${onDuration}:${offDuration}:${sequences}`;
-            await this.sendToAll(command);
+            await this.sendToNodeMCU(command);
             return true;
         } catch (error) {
             console.error('Random sequence error:', error);
@@ -322,7 +373,7 @@ class MicrobitHardwareController {
     async randomFlashSequence(sequences, flashDuration) {
         try {
             const command = `RANDOM_FLASH:${sequences}:${flashDuration}`;
-            await this.sendToAll(command);
+            await this.sendToNodeMCU(command);
             return true;
         } catch (error) {
             console.error('Random flash error:', error);
@@ -333,7 +384,7 @@ class MicrobitHardwareController {
     async randomLEDGame(rounds, speed) {
         try {
             const command = `RANDOM_GAME:${rounds}:${speed}`;
-            await this.sendToAll(command);
+            await this.sendToNodeMCU(command);
             return true;
         } catch (error) {
             console.error('Random game error:', error);
@@ -344,9 +395,9 @@ class MicrobitHardwareController {
     async simonSaysPattern(patternLength, playbackSpeed) {
         try {
             const command = `SIMON:${patternLength}:${playbackSpeed}`;
-            await this.sendToAll(command);
+            await this.sendToNodeMCU(command);
             
-            // The Microbit will send back the pattern
+            // The NodeMCU will send back the pattern
             return { success: true, pattern: [] }; // Pattern will be sent via message handler
         } catch (error) {
             console.error('Simon says error:', error);
@@ -357,7 +408,7 @@ class MicrobitHardwareController {
     async randomCascade(waves, waveSpeed) {
         try {
             const command = `CASCADE:${waves}:${waveSpeed}`;
-            await this.sendToAll(command);
+            await this.sendToNodeMCU(command);
             return true;
         } catch (error) {
             console.error('Cascade error:', error);
@@ -368,7 +419,7 @@ class MicrobitHardwareController {
     async rhythmicRandomPattern(beats, tempo) {
         try {
             const command = `RHYTHM:${beats}:${tempo}`;
-            await this.sendToAll(command);
+            await this.sendToNodeMCU(command);
             return true;
         } catch (error) {
             console.error('Rhythm error:', error);
@@ -379,7 +430,7 @@ class MicrobitHardwareController {
     // Game Event Patterns
     async gameStartPattern() {
         try {
-            await this.sendToAll('GAME_START');
+            await this.sendToNodeMCU('GAME_START');
             return true;
         } catch (error) {
             console.error('Game start pattern error:', error);
@@ -389,7 +440,7 @@ class MicrobitHardwareController {
 
     async gameOverPattern() {
         try {
-            await this.sendToAll('GAME_OVER');
+            await this.sendToNodeMCU('GAME_OVER');
             return true;
         } catch (error) {
             console.error('Game over pattern error:', error);
@@ -399,7 +450,7 @@ class MicrobitHardwareController {
 
     async gameWinPattern() {
         try {
-            await this.sendToAll('GAME_WIN');
+            await this.sendToNodeMCU('GAME_WIN');
             return true;
         } catch (error) {
             console.error('Game win pattern error:', error);
@@ -407,33 +458,66 @@ class MicrobitHardwareController {
         }
     }
 
+    async testSequence() {
+        console.log('🔄 Starting NodeMCU test sequence...');
+        
+        try {
+            // Flash all LEDs
+            console.log('   📍 Test 1/3: Flashing all LEDs (2 times)...');
+            await this.flashAllLEDs(2, 150);
+            await this.delay(500);
+            console.log('   ✓ Flash test complete');
+            
+            // Chase pattern
+            console.log('   📍 Test 2/3: Chase pattern (2 rounds)...');
+            await this.chaseLEDs(2, 100);
+            await this.delay(500);
+            console.log('   ✓ Chase pattern complete');
+            
+            // Individual LED test
+            console.log('   📍 Test 3/3: Individual LED test...');
+            for (let i = 1; i <= 4; i++) {
+                console.log(`      • Testing LED ${i} (${this.buttonColors[i-1]})...`);
+                await this.setLED(i, true);
+                await this.delay(200);
+                await this.setLED(i, false);
+                await this.delay(100);
+            }
+            console.log('   ✓ Individual LED test complete');
+            
+            console.log('🎉 Test sequence completed successfully!');
+            return true;
+        } catch (error) {
+            console.error('❌ Test sequence error:', error);
+            return false;
+        }
+    }
+
     getStatus() {
         return {
             connected: this.connected,
-            connectionCount: this.microbits.length,
-            microbits: this.microbits.map(mb => ({
-                id: mb.id,
-                path: mb.path,
-                buttonStates: mb.buttonStates
-            }))
+            connectionCount: this.connected ? 1 : 0,
+            device: 'NodeMCU ESP8266',
+            buttonStates: this.buttonStates
         };
     }
 
+    delay(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
     async disconnect() {
-        console.log('Disconnecting all Microbits...');
-        
-        for (const mb of this.microbits) {
+        if (this.nodemcu && this.nodemcu.port) {
             try {
-                await this.sendToMicrobit(mb, 'DISCONNECT');
-                await new Promise(resolve => setTimeout(resolve, 100));
-                mb.port.close();
+                await this.sendToNodeMCU('DISCONNECT');
+                await this.delay(100);
+                this.nodemcu.port.close();
             } catch (error) {
-                console.error(`Error disconnecting Microbit ${mb.id}:`, error);
+                console.error('Disconnect error:', error);
             }
         }
-        
-        this.microbits = [];
         this.connected = false;
+        this.nodemcu = null;
     }
 }
 
@@ -469,16 +553,28 @@ function createWindow() {
 
     createMenu();
     
-    // Initialize Microbit controller
+    // Initialize NodeMCU controller
     initializeMicrobitController();
 }
 
 async function initializeMicrobitController() {
+    console.log('');
+    console.log('╔════════════════════════════════════════════════════════════╗');
+    console.log('║     Music Cognition Testing Platform - NodeMCU Edition    ║');
+    console.log('║                  Hardware Initialization                   ║');
+    console.log('╚════════════════════════════════════════════════════════════╝');
+    console.log('');
+    
     microbitController = new MicrobitHardwareController();
     const result = await microbitController.initialize();
     
     if (result.success) {
-        console.log('✅ Microbit controller initialized');
+        console.log('');
+        console.log('✅ NodeMCU controller initialized successfully');
+        console.log('📊 Status: Ready for testing');
+        console.log('👉 Press any arcade button to test...');
+        console.log('');
+        
         if (mainWindow) {
             mainWindow.webContents.send('microbit-status', {
                 status: 'connected',
@@ -486,7 +582,11 @@ async function initializeMicrobitController() {
             });
         }
     } else {
-        console.log('⚠️ Microbit controller initialization failed');
+        console.log('');
+        console.log('⚠️ NodeMCU controller initialization failed');
+        console.log('💡 Tip: Check USB connection and drivers');
+        console.log('');
+        
         if (mainWindow) {
             mainWindow.webContents.send('microbit-status', {
                 status: 'disconnected',
@@ -547,7 +647,7 @@ function createMenu() {
             label: 'Hardware',
             submenu: [
                 {
-                    label: 'Reconnect Microbit',
+                    label: 'Reconnect NodeMCU',
                     click: async () => {
                         if (microbitController) {
                             await microbitController.disconnect();
@@ -564,14 +664,14 @@ function createMenu() {
                     }
                 },
                 {
-                    label: 'Microbit Status',
+                    label: 'NodeMCU Status',
                     click: () => {
                         if (microbitController) {
                             const status = microbitController.getStatus();
                             dialog.showMessageBox(mainWindow, {
                                 type: 'info',
-                                title: 'Microbit Status',
-                                message: `Connected: ${status.connected}\nDevices: ${status.connectionCount}`
+                                title: 'NodeMCU Status',
+                                message: `Connected: ${status.connected}\nDevice: ${status.device || 'NodeMCU ESP8266'}`
                             });
                         }
                     }
@@ -606,7 +706,7 @@ function createMenu() {
                         dialog.showMessageBox(mainWindow, {
                             type: 'info',
                             title: 'About',
-                            message: 'Music Cognition Testing Platform v1.0.0'
+                            message: 'Music Cognition Testing Platform v1.0.0\nNodeMCU ESP8266 Edition'
                         });
                     }
                 }
@@ -642,7 +742,7 @@ app.on('before-quit', async () => {
 });
 
 // ========================================
-// IPC HANDLERS - MICROBIT HARDWARE
+// IPC HANDLERS - NODEMCU HARDWARE
 // ========================================
 
 ipcMain.handle('setup-microbit', async () => {
@@ -664,7 +764,7 @@ ipcMain.handle('set-led', async (event, buttonNumber, state) => {
         const success = await microbitController.setLED(buttonNumber, state);
         return { success };
     }
-    return { success: false, error: 'Microbit not connected' };
+    return { success: false, error: 'NodeMCU not connected' };
 });
 
 ipcMain.handle('set-all-leds', async (event, state) => {
@@ -672,7 +772,7 @@ ipcMain.handle('set-all-leds', async (event, state) => {
         const success = await microbitController.setAllLEDs(state);
         return { success };
     }
-    return { success: false, error: 'Microbit not connected' };
+    return { success: false, error: 'NodeMCU not connected' };
 });
 
 ipcMain.handle('flash-led', async (event, buttonNumber, times, duration) => {
@@ -680,7 +780,7 @@ ipcMain.handle('flash-led', async (event, buttonNumber, times, duration) => {
         const success = await microbitController.flashLED(buttonNumber, times, duration);
         return { success };
     }
-    return { success: false, error: 'Microbit not connected' };
+    return { success: false, error: 'NodeMCU not connected' };
 });
 
 ipcMain.handle('flash-all-leds', async (event, times, duration) => {
@@ -688,7 +788,7 @@ ipcMain.handle('flash-all-leds', async (event, times, duration) => {
         const success = await microbitController.flashAllLEDs(times, duration);
         return { success };
     }
-    return { success: false, error: 'Microbit not connected' };
+    return { success: false, error: 'NodeMCU not connected' };
 });
 
 ipcMain.handle('chase-leds', async (event, rounds, speed) => {
@@ -696,7 +796,7 @@ ipcMain.handle('chase-leds', async (event, rounds, speed) => {
         const success = await microbitController.chaseLEDs(rounds, speed);
         return { success };
     }
-    return { success: false, error: 'Microbit not connected' };
+    return { success: false, error: 'NodeMCU not connected' };
 });
 
 ipcMain.handle('random-led-sequence', async (event, count, onDuration, offDuration, sequences) => {
@@ -704,7 +804,7 @@ ipcMain.handle('random-led-sequence', async (event, count, onDuration, offDurati
         const success = await microbitController.randomLEDSequence(count, onDuration, offDuration, sequences);
         return { success };
     }
-    return { success: false, error: 'Microbit not connected' };
+    return { success: false, error: 'NodeMCU not connected' };
 });
 
 ipcMain.handle('random-flash-sequence', async (event, sequences, flashDuration) => {
@@ -712,7 +812,7 @@ ipcMain.handle('random-flash-sequence', async (event, sequences, flashDuration) 
         const success = await microbitController.randomFlashSequence(sequences, flashDuration);
         return { success };
     }
-    return { success: false, error: 'Microbit not connected' };
+    return { success: false, error: 'NodeMCU not connected' };
 });
 
 ipcMain.handle('random-led-game', async (event, rounds, speed) => {
@@ -720,7 +820,7 @@ ipcMain.handle('random-led-game', async (event, rounds, speed) => {
         const success = await microbitController.randomLEDGame(rounds, speed);
         return { success };
     }
-    return { success: false, error: 'Microbit not connected' };
+    return { success: false, error: 'NodeMCU not connected' };
 });
 
 ipcMain.handle('simon-says-pattern', async (event, patternLength, playbackSpeed) => {
@@ -728,7 +828,7 @@ ipcMain.handle('simon-says-pattern', async (event, patternLength, playbackSpeed)
         const result = await microbitController.simonSaysPattern(patternLength, playbackSpeed);
         return result;
     }
-    return { success: false, error: 'Microbit not connected' };
+    return { success: false, error: 'NodeMCU not connected' };
 });
 
 ipcMain.handle('random-cascade', async (event, waves, waveSpeed) => {
@@ -736,7 +836,7 @@ ipcMain.handle('random-cascade', async (event, waves, waveSpeed) => {
         const success = await microbitController.randomCascade(waves, waveSpeed);
         return { success };
     }
-    return { success: false, error: 'Microbit not connected' };
+    return { success: false, error: 'NodeMCU not connected' };
 });
 
 ipcMain.handle('rhythmic-random-pattern', async (event, beats, tempo) => {
@@ -744,7 +844,7 @@ ipcMain.handle('rhythmic-random-pattern', async (event, beats, tempo) => {
         const success = await microbitController.rhythmicRandomPattern(beats, tempo);
         return { success };
     }
-    return { success: false, error: 'Microbit not connected' };
+    return { success: false, error: 'NodeMCU not connected' };
 });
 
 ipcMain.handle('game-start-pattern', async () => {
@@ -752,7 +852,7 @@ ipcMain.handle('game-start-pattern', async () => {
         const success = await microbitController.gameStartPattern();
         return { success };
     }
-    return { success: false, error: 'Microbit not connected' };
+    return { success: false, error: 'NodeMCU not connected' };
 });
 
 ipcMain.handle('game-over-pattern', async () => {
@@ -760,7 +860,7 @@ ipcMain.handle('game-over-pattern', async () => {
         const success = await microbitController.gameOverPattern();
         return { success };
     }
-    return { success: false, error: 'Microbit not connected' };
+    return { success: false, error: 'NodeMCU not connected' };
 });
 
 ipcMain.handle('game-win-pattern', async () => {
@@ -768,7 +868,7 @@ ipcMain.handle('game-win-pattern', async () => {
         const success = await microbitController.gameWinPattern();
         return { success };
     }
-    return { success: false, error: 'Microbit not connected' };
+    return { success: false, error: 'NodeMCU not connected' };
 });
 
 // ========================================
@@ -789,7 +889,8 @@ ipcMain.handle('create-session', async (event, participantData) => {
                 platform: process.platform,
                 electronVersion: process.versions.electron,
                 nodeVersion: process.versions.node,
-                microbitConnected: microbitController ? microbitController.connected : false
+                hardwareConnected: microbitController ? microbitController.connected : false,
+                hardwareDevice: 'NodeMCU ESP8266'
             }
         };
         
@@ -1027,4 +1128,4 @@ async function loadSession() {
     }
 }
 
-console.log('🚀 Music Cognition Testing Platform - Main Process Started');
+console.log('🚀 Music Cognition Testing Platform - Main Process Started (NodeMCU Edition)');

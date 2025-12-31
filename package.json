@@ -14,8 +14,8 @@
     "dist": "electron-builder --publish=never",
     "test": "jest",
     "calibrate": "node scripts/calibrate-system.js",
-    "security-check": "npm audit",
-    "clean": "rm -rf node_modules package-lock.json && npm install"
+    "rebuild": "electron-rebuild -f -w sqlite3",
+    "postinstall": "electron-builder install-app-deps"
   },
   "keywords": [
     "electron",
@@ -31,18 +31,21 @@
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^20.0.0",
-    "electron": "^28.0.0",
-    "electron-builder": "^24.13.0",
-    "jest": "^29.7.0"
+    "electron": "^38.2.2",
+    "electron-builder": "^24.0.0",
+    "electron-rebuild": "^3.2.9",
+    "jest": "^29.0.0"
   },
   "dependencies": {
-    "csv-writer": "^1.6.0",
-    "serialport": "^12.0.0",
-    "tone": "^15.0.4",
+    "@serialport/parser-readline": "^13.0.0",
     "chart.js": "^4.4.0",
-    "date-fns": "^3.0.0",
-    "uuid": "^9.0.1",
-    "lodash": "^4.17.21"
+    "csv-writer": "^1.6.0",
+    "date-fns": "^2.30.0",
+    "lodash": "^4.17.21",
+    "serialport": "^12.0.0",
+    "sqlite3": "^5.1.7",
+    "tone": "^14.7.77",
+    "uuid": "^9.0.1"
   },
   "build": {
     "appId": "com.research.musiccognition.platform",
@@ -63,7 +66,15 @@
       "!**/{.DS_Store,.git,.hg,.svn,CVS,RCS,SCCS,.gitignore,.gitattributes}",
       "!**/{__pycache__,thumbs.db,.flowconfig,.idea,.vs,.nyc_output}",
       "!**/{appveyor.yml,.travis.yml,circle.yml}",
-      "!**/{npm-debug.log,yarn.lock,.yarn-integrity,.yarn-metadata.json}"
+      "!**/{npm-debug.log,yarn.lock,.yarn-integrity,.yarn-metadata.json}",
+      "!data/*.db",
+      "!data/*.db-*"
+    ],
+    "extraFiles": [
+      {
+        "from": "data/.gitkeep",
+        "to": "data/.gitkeep"
+      }
     ],
     "win": {
       "target": [
@@ -86,8 +97,7 @@
           ]
         }
       ],
-      "icon": "assets/icon.icns",
-      "category": "public.app-category.education"
+      "icon": "assets/icon.icns"
     },
     "linux": {
       "target": [
@@ -98,8 +108,7 @@
           ]
         }
       ],
-      "icon": "assets/icon.png",
-      "category": "Education;Science"
+      "icon": "assets/icon.png"
     },
     "nsis": {
       "oneClick": false,
@@ -107,8 +116,5 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true
     }
-  },
-  "resolutions": {
-    "underscore": "^1.13.6"
   }
 }

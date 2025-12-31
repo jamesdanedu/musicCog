@@ -438,6 +438,30 @@ class MusicCognitionPlatform {
             });
         }
 
+         const caffeineSourceSelect = document.getElementById('caffeineSource');
+        const caffeineAmountSelect = document.getElementById('caffeineAmount');
+
+        if (caffeineSourceSelect && caffeineAmountSelect) {
+            function updateCaffeineAmountState() {
+                if (caffeineSourceSelect.value === 'none') {
+                    caffeineAmountSelect.disabled = true;
+                    caffeineAmountSelect.value = 'none';
+                    caffeineAmountSelect.style.opacity = '0.5';
+                    caffeineAmountSelect.style.cursor = 'not-allowed';
+                    caffeineAmountSelect.style.backgroundColor = 'rgba(255,255,255,0.1)';
+                } else {
+                    caffeineAmountSelect.disabled = false;
+                    caffeineAmountSelect.style.opacity = '1';
+                    caffeineAmountSelect.style.cursor = 'pointer';
+                    caffeineAmountSelect.style.backgroundColor = 'rgba(255,255,255,0.25)';
+                }
+            }
+            
+            caffeineSourceSelect.addEventListener('change', updateCaffeineAmountState);
+            updateCaffeineAmountState();
+            console.log('✓ Caffeine dependency logic initialized');
+        }
+
         console.log('Event listeners setup complete');
     }
 
